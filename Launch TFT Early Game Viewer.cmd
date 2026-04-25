@@ -1,5 +1,6 @@
 @echo off
 setlocal
+title TFT Early Game Viewer
 
 set "ROOT=%~dp0"
 set "PORT=3002"
@@ -10,7 +11,8 @@ cd /d "%ROOT%"
 where node >nul 2>nul
 if errorlevel 1 (
   echo Node.js 20+ is required before this launcher can run.
-  echo Install Node.js, then double-click this file again.
+  echo Install Node.js from https://nodejs.org/, then double-click this file again.
+  echo.
   pause
   exit /b 1
 )
@@ -18,7 +20,8 @@ if errorlevel 1 (
 where npm >nul 2>nul
 if errorlevel 1 (
   echo npm is required before this launcher can run.
-  echo Install Node.js with npm, then double-click this file again.
+  echo Install Node.js with npm from https://nodejs.org/, then double-click this file again.
+  echo.
   pause
   exit /b 1
 )
@@ -29,28 +32,31 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "exit 1"
 
 if not errorlevel 1 (
-  echo TFT Early Game Viewer is already running.
+  echo TFT Early Game Viewer is already running at %URL%
   exit /b 0
 )
 
 echo Starting TFT Early Game Viewer on %URL%
+echo This window must stay open while you use the app.
+echo Fresh installs can take several minutes. Do not close this window during dependency install.
 echo.
 
-start "TFT Early Game Viewer Dev Server" cmd /k "cd /d ""%ROOT%"" && npm run launch"
-
-echo Waiting for the app to respond...
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+start "" powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command ^
   "$url='%URL%';" ^
-  "$deadline=(Get-Date).AddSeconds(30);" ^
-  "do { try { $r=Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 2; if ($r.StatusCode -eq 200) { Start-Process $url; exit 0 } } catch {}; Start-Sleep -Milliseconds 750 } while ((Get-Date) -lt $deadline);" ^
+  "$deadline=(Get-Date).AddMinutes(5);" ^
+  "do { try { $r=Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 2; if ($r.StatusCode -eq 200) { Start-Process $url; exit 0 } } catch {}; Start-Sleep -Seconds 1 } while ((Get-Date) -lt $deadline);" ^
   "exit 1"
 
-if errorlevel 1 (
-  echo.
-  echo The dev server did not respond at %URL% within 30 seconds.
-  echo Check the dev server window for the actual error.
-  pause
-  exit /b 1
-)
+call npm run launch
+set "EXIT_CODE=%ERRORLEVEL%"
 
-exit /b 0
+echo.
+echo TFT Early Game Viewer stopped with exit code %EXIT_CODE%.
+if "%EXIT_CODE%"=="0" (
+  echo The server stopped normally.
+) else (
+  echo Leave this window open and read the error above.
+)
+echo.
+pause
+exit /b %EXIT_CODE%
