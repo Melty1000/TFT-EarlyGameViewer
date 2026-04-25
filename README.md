@@ -12,6 +12,23 @@ Desktop-first TFT comp browser rebuilt with React, TypeScript, and Vite, backed 
 - `npm run data:validate` - validate the generated dataset without re-syncing it
 - `npm run data:scrape-live` - capture a fresh Mobalytics HTML snapshot into `data/raw/`
 
+## Commit workflow
+
+This repo uses the same Husky commit metadata system as Christmas Lights Studio:
+
+- `pre-commit` runs `npm run typecheck`
+- `prepare-commit-msg` appends `[AI: <model> | Machine: <machine>]` to the commit subject
+- `commit-msg` rejects commits that do not include that metadata
+
+Set the local defaults once per development machine:
+
+```powershell
+git config melty.aiModel "GPT-5 Codex"
+git config melty.commitMachine "desktop"
+```
+
+Environment variables can override those defaults for one commit: `AI_MODEL`, `CODEX_MODEL`, `AI_COMMIT_MACHINE`, or `CODEX_MACHINE`.
+
 ## Repo shape
 
 - `src/` - React app

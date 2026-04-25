@@ -6,11 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "test": "vitest run",
     "data:sync": "tsx scripts/data-sync.ts",
     "data:validate": "tsx scripts/data-validate.ts",
-    "data:scrape-live": "tsx scripts/scrape-mobalytics.ts"
+    "data:scrape-live": "tsx scripts/scrape-mobalytics.ts",
+    "prepare": "husky"
   },
   "dependencies": {
     "react": "^19.1.0",
@@ -25,6 +27,7 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.4.1",
+    "husky": "^9.1.7",
     "jsdom": "^26.0.0",
     "playwright": "^1.51.1",
     "tsx": "^4.19.3",
