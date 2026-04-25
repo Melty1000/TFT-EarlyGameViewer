@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.log
+/*.png
+/data/raw/
+/legacy/
+/public/data/tft-set16.json
