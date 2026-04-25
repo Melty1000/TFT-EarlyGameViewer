@@ -5,6 +5,7 @@ Desktop-first TFT comp browser rebuilt with React, TypeScript, and Vite, backed 
 ## Commands
 
 - `npm install` - install the app, test, and pipeline dependencies
+- `npm run launch` - install missing dependencies if needed and launch the app on `127.0.0.1:3002`
 - `npm run dev` - start the Vite app
 - `npm run build` - typecheck and build the production bundle
 - `npm run test` - run unit and component tests
@@ -28,6 +29,24 @@ git config melty.commitMachine "desktop"
 ```
 
 Environment variables can override those defaults for one commit: `AI_MODEL`, `CODEX_MODEL`, `AI_COMMIT_MACHINE`, or `CODEX_MACHINE`.
+
+## Portable Launch
+
+From any cloned copy of the repo:
+
+```powershell
+npm run launch
+```
+
+The launcher is repo-relative and does not depend on local absolute paths. It requires Node 20+, installs missing dependencies with `npm install`, then starts Vite with `--strictPort` on `127.0.0.1:3002`.
+
+Override the target when needed:
+
+```powershell
+npm run launch -- --port 3003
+npm run launch -- --host 0.0.0.0 --port 3002
+npm run launch -- --no-install
+```
 
 ## Repo shape
 
