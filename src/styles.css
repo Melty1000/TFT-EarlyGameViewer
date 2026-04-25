@@ -1018,14 +1018,59 @@ p {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 8px;
   border: 1px solid var(--border);
   border-radius: 5px;
   background: transparent;
   color: var(--text);
-  cursor: pointer;
   text-align: left;
   min-height: 40px;
+}
+
+.token-button {
+  padding: 7px 8px;
+  cursor: pointer;
+}
+
+.augment-card {
+  gap: 0;
+  overflow: hidden;
+}
+
+.augment-main-action,
+.augment-filter-action {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.augment-main-action {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.augment-filter-action {
+  width: 32px;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  border-left: 1px solid var(--border);
+  color: var(--text-soft);
+}
+
+.augment-filter-action:hover,
+.augment-main-action:hover {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.augment-filter-action:hover {
+  color: var(--cyan);
 }
 
 .synergy-card {

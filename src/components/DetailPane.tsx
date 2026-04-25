@@ -137,29 +137,45 @@ function renderChampionTile(
 function renderAugment(
   augment: Augment | undefined,
   onHoverAugment: (id: string | null) => void,
-  onToggleLock: (target: InspectorTarget) => void
+  onToggleLock: (target: InspectorTarget) => void,
+  onQuickFilter: (label: string) => void
 ) {
   if (!augment) {
     return null;
   }
 
   return (
-    <button
+    <div
       key={augment.id}
-      type="button"
       className={`augment-card named-card tier-${augment.tier.toLowerCase()}`}
-      aria-label={`Inspect augment ${augment.name}`}
       title={augment.name}
       onMouseEnter={() => onHoverAugment(augment.id)}
       onMouseLeave={() => onHoverAugment(null)}
-      onClick={() => onToggleLock({ kind: "augment", id: augment.id })}
     >
-      <img src={augment.icon} alt={augment.name} className="augment-icon" />
-      <div className="augment-copy">
-        <span className="augment-name">{augment.name}</span>
-        <span className="augment-rank">{augment.tier}</span>
-      </div>
-    </button>
+      <button
+        type="button"
+        className="augment-main-action"
+        aria-label={`Inspect augment ${augment.name}`}
+        onClick={() => onToggleLock({ kind: "augment", id: augment.id })}
+      >
+        <img src={augment.icon} alt={augment.name} className="augment-icon" />
+        <div className="augment-copy">
+          <span className="augment-name">{augment.name}</span>
+          <span className="augment-rank">{augment.tier}</span>
+        </div>
+      </button>
+      <button
+        type="button"
+        className="augment-filter-action"
+        aria-label={`Filter by augment ${augment.name}`}
+        title={`Filter by ${augment.name}`}
+        onClick={() => onQuickFilter(augment.name)}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <path d="M3 5h18l-7 8v5l-4 2v-7L3 5Z" />
+        </svg>
+      </button>
+    </div>
   );
 }
 
@@ -477,7 +493,7 @@ export function DetailPane({
           </div>
           <div className="augment-grid icon-grid support-augment-grid">
             {comp.recommendedAugmentIds.map((augmentId) =>
-              renderAugment(dataset.augmentsById[augmentId], onHoverAugment, onToggleLock)
+              renderAugment(dataset.augmentsById[augmentId], onHoverAugment, onToggleLock, onQuickFilter)
             )}
           </div>
         </div>

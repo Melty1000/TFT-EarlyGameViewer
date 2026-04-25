@@ -56,6 +56,50 @@ describe("App", () => {
     });
   });
 
+  it("filters the comp list from a recommended augment action", async () => {
+    const user = userEvent.setup();
+    const compWithAugment = dataset.comps.find((comp) =>
+      comp.recommendedAugmentIds.some((augmentId) => {
+        const matches = dataset.comps.filter((candidate) => candidate.recommendedAugmentIds.includes(augmentId));
+        return matches.length > 0 && matches.length < dataset.comps.length;
+      })
+    );
+
+    expect(compWithAugment).toBeDefined();
+    if (!compWithAugment) {
+      return;
+    }
+
+    const augmentId = compWithAugment.recommendedAugmentIds.find((candidateAugmentId) => {
+      const matches = dataset.comps.filter((candidate) => candidate.recommendedAugmentIds.includes(candidateAugmentId));
+      return matches.length > 0 && matches.length < dataset.comps.length;
+    });
+
+    expect(augmentId).toBeDefined();
+    if (!augmentId) {
+      return;
+    }
+
+    const augment = dataset.augmentsById[augmentId];
+    const compWithoutAugment = dataset.comps.find((comp) => !comp.recommendedAugmentIds.includes(augmentId));
+
+    expect(augment).toBeDefined();
+    expect(compWithoutAugment).toBeDefined();
+    if (!augment || !compWithoutAugment) {
+      return;
+    }
+
+    render(<App />);
+
+    const row = await ensureExpanded(user, compWithAugment.title);
+    await user.click(within(row).getByRole("button", { name: `Filter by augment ${augment.name}` }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: `Toggle comp ${compWithAugment.title}` })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: `Toggle comp ${compWithoutAugment.title}` })).not.toBeInTheDocument();
+    });
+  });
+
   it("supports multiple expanded rows with row-local inspector state", async () => {
     const user = userEvent.setup();
     const [firstComp, secondComp] = dataset.comps;
