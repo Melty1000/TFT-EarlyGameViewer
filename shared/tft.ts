@@ -17,7 +17,8 @@ export const boardSlotSchema = z.object({
 export const phaseSchema = z.object({
   boardSlots: z.array(boardSlotSchema).length(28),
   championIds: z.array(z.string().min(1)),
-  synergyIds: z.array(z.string().min(1))
+  synergyIds: z.array(z.string().min(1)),
+  championLevels: z.record(z.number().int().min(1).max(3)).default({})
 });
 
 export const championSchema = z.object({
@@ -49,9 +50,23 @@ export const augmentSchema = z.object({
   icon: z.string().min(1)
 });
 
+export const synergyBreakpointSchema = z.object({
+  units: z.number().int().min(1),
+  effect: z.string().default("")
+});
+
 export const synergySchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  icon: z.string().min(1),
+  description: z.string().default(""),
+  breakpoints: z.array(synergyBreakpointSchema).default([])
+});
+
+export const itemSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().default(""),
   icon: z.string().min(1)
 });
 
@@ -90,7 +105,8 @@ export const compSchema = z.object({
   recommendedAugmentIds: z.array(z.string().min(1)),
   guide: compGuideSchema,
   componentDemand: z.array(componentDemandSchema),
-  notes: z.string().optional()
+  notes: z.string().optional(),
+  teamCode: z.string().optional()
 });
 
 export const datasetMetaSchema = z.object({
@@ -109,7 +125,8 @@ export const datasetSchema = z.object({
   comps: z.array(compSchema),
   championsById: z.record(championSchema),
   augmentsById: z.record(augmentSchema),
-  synergiesById: z.record(synergySchema)
+  synergiesById: z.record(synergySchema),
+  itemsById: z.record(itemSchema).default({})
 });
 
 export type ComponentDemand = z.infer<typeof componentDemandSchema>;
@@ -118,6 +135,8 @@ export type PhaseData = z.infer<typeof phaseSchema>;
 export type Champion = z.infer<typeof championSchema>;
 export type Augment = z.infer<typeof augmentSchema>;
 export type Synergy = z.infer<typeof synergySchema>;
+export type SynergyBreakpoint = z.infer<typeof synergyBreakpointSchema>;
+export type Item = z.infer<typeof itemSchema>;
 export type GuideSection = z.infer<typeof guideSectionSchema>;
 export type CompGuide = z.infer<typeof compGuideSchema>;
 export type CompSource = z.infer<typeof compSourceSchema>;

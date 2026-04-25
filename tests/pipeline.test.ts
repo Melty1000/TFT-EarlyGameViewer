@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import generatedDataset from "../public/data/tft-set17.json";
+import generatedDataset from "../src/data/tft-set17.json";
 import { datasetSchema } from "../shared/tft";
 import { validateDataset } from "../scripts/pipeline";
 

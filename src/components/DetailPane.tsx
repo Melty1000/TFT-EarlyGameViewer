@@ -1,9 +1,12 @@
-import type { Augment, Champion, Comp, Dataset } from "../../shared/tft";
+import { useState } from "react";
+import type { Augment, Champion, Comp, Dataset, Item, Synergy } from "../../shared/tft";
 import type { PhaseKey } from "../../shared/normalization";
 
 export type InspectorTarget =
   | { kind: "champion"; id: string }
   | { kind: "augment"; id: string }
+  | { kind: "synergy"; id: string }
+  | { kind: "item"; id: string }
   | null;
 
 export type DetailTab = "overview" | PhaseKey;
@@ -19,6 +22,8 @@ type DetailPaneProps = {
   lockedInspector: InspectorTarget;
   onHoverChampion: (id: string | null) => void;
   onHoverAugment: (id: string | null) => void;
+  onHoverSynergy: (id: string | null) => void;
+  onHoverItem: (id: string | null) => void;
   onToggleLock: (target: InspectorTarget) => void;
   onQuickFilter: (label: string) => void;
 };
@@ -79,6 +84,45 @@ function buildInspectorModel(
     };
   }
 
+  if (inspector.kind === "synergy") {
+    const synergy: Synergy | undefined = dataset.synergiesById[inspector.id];
+    if (!synergy) {
+      return null;
+    }
+    const breakpointChips = synergy.breakpoints.map((bp) => `${bp.units}`);
+    return {
+      title: synergy.name,
+      body: cleanGameText(synergy.description) || "No trait description was captured.",
+      chips: breakpointChips.length ? breakpointChips : ["Trait"],
+      icon: synergy.icon,
+      accent: "Trait"
+    };
+  }
+
+  if (inspector.kind === "item") {
+    const item: Item | undefined = dataset.itemsById?.[inspector.id];
+    const fallbackName = inspector.id
+      .split("-")
+      .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+      .join(" ");
+    if (!item) {
+      return {
+        title: fallbackName,
+        body: "Item details were not captured in this dataset build.",
+        chips: ["Item"],
+        icon: `${import.meta.env.BASE_URL}assets/items/${inspector.id}.png`,
+        accent: "Item"
+      };
+    }
+    return {
+      title: item.name,
+      body: cleanGameText(item.description) || "No item description was captured.",
+      chips: ["Item"],
+      icon: item.icon,
+      accent: "Item"
+    };
+  }
+
   const augment = dataset.augmentsById[inspector.id];
   if (!augment) {
     return null;
@@ -96,8 +140,13 @@ function buildInspectorModel(
 function renderChampionTile(
   slotKey: number,
   champion: Champion | undefined,
+  itemIds: string[],
+  starLevel: number,
+  dataset: Dataset,
   onHoverChampion: (id: string | null) => void,
-  onToggleLock: (target: InspectorTarget) => void
+  onHoverItem: (id: string | null) => void,
+  onToggleLock: (target: InspectorTarget) => void,
+  onQuickFilter: (label: string) => void
 ) {
   if (!champion) {
     return (
@@ -107,30 +156,72 @@ function renderChampionTile(
     );
   }
 
+  const stars = Math.max(1, Math.min(3, Math.round(starLevel || 1)));
+
   return (
-    <button
+    <div
       key={slotKey}
-      type="button"
       className={`board-slot filled cost-${champion.cost}`}
-      aria-label={`Inspect champion ${champion.name}`}
       onMouseEnter={() => onHoverChampion(champion.id)}
       onMouseLeave={() => onHoverChampion(null)}
-      onClick={() => onToggleLock({ kind: "champion", id: champion.id })}
     >
-      <div className="board-slot-shell">
-        <div className="champ-frame">
-          <img src={champion.icon} alt={champion.name} className="champ-icon" />
+      <button
+        type="button"
+        className="board-slot-trigger"
+        aria-label={`Inspect champion ${champion.name}`}
+        onClick={() => onToggleLock({ kind: "champion", id: champion.id })}
+      >
+        <div className="board-slot-shell">
+          <div className="champ-frame">
+            <img src={champion.icon} alt={champion.name} className="champ-icon" />
+          </div>
         </div>
-      </div>
+      </button>
+      {stars > 1 ? (
+        <span className={`champ-star-badge stars-${stars}`} title={`Target: ${stars}-star`}>
+          {"★".repeat(stars)}
+        </span>
+      ) : null}
       {champion.requiresUnlock ? (
         <span
           className="board-unlock-badge"
           title={champion.unlockCondition ?? `${champion.name} must be unlocked before purchase.`}
         >
-          <img src="/assets/system/lock.svg" alt="" className="board-unlock-icon" />
+          <img src={`${import.meta.env.BASE_URL}assets/system/lock.svg`} alt="" className="board-unlock-icon" />
         </span>
       ) : null}
-    </button>
+      {itemIds.length > 0 ? (
+        <div className="board-item-strip">
+          {itemIds.slice(0, 3).map((itemId, index) => {
+            const item = dataset.itemsById?.[itemId];
+            const displayName = item?.name ?? itemId.replace(/-/g, " ");
+            const iconUrl = item?.icon ?? `${import.meta.env.BASE_URL}assets/items/${itemId}.png`;
+            return (
+              <button
+                key={`${itemId}-${index}`}
+                type="button"
+                className="board-item-icon"
+                title={`${displayName} — click to filter, right-click to pin`}
+                aria-label={`Filter by ${displayName}; right-click to pin`}
+                onMouseEnter={() => onHoverItem(itemId)}
+                onMouseLeave={() => onHoverItem(null)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onQuickFilter(displayName);
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onToggleLock({ kind: "item", id: itemId });
+                }}
+              >
+                <img src={iconUrl} alt={displayName} />
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -316,9 +407,12 @@ export function DetailPane({
   lockedInspector,
   onHoverChampion,
   onHoverAugment,
+  onHoverSynergy,
+  onHoverItem,
   onToggleLock,
   onQuickFilter
 }: DetailPaneProps) {
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const phase = comp.phases[activePhase];
   const activeInspector = buildInspectorModel(dataset, lockedInspector ?? inspector);
   const boardCells = phase.boardSlots.map((slot, slotIndex) => {
@@ -371,9 +465,30 @@ export function DetailPane({
             </button>
           ))}
         </div>
-        <a href={comp.sourceUrl} target="_blank" rel="noreferrer" className="source-link">
-          Open source guide
-        </a>
+        <div className="detail-toolbar-actions">
+          {comp.teamCode ? (
+            <button
+              type="button"
+              className={`copy-code-btn${copyState === "copied" ? " is-copied" : ""}${copyState === "error" ? " is-error" : ""}`}
+              aria-label="Copy team code to clipboard"
+              title={comp.teamCode}
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(comp.teamCode ?? "");
+                  setCopyState("copied");
+                } catch {
+                  setCopyState("error");
+                }
+                setTimeout(() => setCopyState("idle"), 1500);
+              }}
+            >
+              {copyState === "copied" ? "Copied!" : copyState === "error" ? "Copy failed" : "Copy code"}
+            </button>
+          ) : null}
+          <a href={comp.sourceUrl} target="_blank" rel="noreferrer" className="source-link">
+            Open source guide
+          </a>
+        </div>
       </div>
 
       <div className="detail-grid">
@@ -388,9 +503,20 @@ export function DetailPane({
             <div className="board-grid">
               {boardCells.map(({ slot, style }) => {
                 const champion = slot.championId ? dataset.championsById[slot.championId] : undefined;
+                const starLevel = champion ? phase.championLevels?.[champion.id] ?? 1 : 1;
                 return (
                   <div key={slot.index} className="board-cell" style={style}>
-                    {renderChampionTile(slot.index, champion, onHoverChampion, onToggleLock)}
+                    {renderChampionTile(
+                      slot.index,
+                      champion,
+                      slot.itemIds ?? [],
+                      starLevel,
+                      dataset,
+                      onHoverChampion,
+                      onHoverItem,
+                      onToggleLock,
+                      onQuickFilter
+                    )}
                   </div>
                 );
               })}
@@ -442,7 +568,7 @@ export function DetailPane({
               </div>
               {activeInspector.unlockCondition ? (
                 <div className="unlock-callout">
-                  <img src="/assets/system/lock.svg" alt="" className="unlock-callout-icon" />
+                  <img src={`${import.meta.env.BASE_URL}assets/system/lock.svg`} alt="" className="unlock-callout-icon" />
                   <div>
                     <p className="unlock-callout-label">Unlock before purchase</p>
                     <p className="unlock-callout-copy">{activeInspector.unlockCondition}</p>
@@ -463,22 +589,29 @@ export function DetailPane({
         <div className="detail-card detail-card-inline">
           <div className="section-header">
             <h3>Synergies</h3>
-            <p>Click an icon to filter</p>
+            <p>Hover for info · click to filter · right-click to pin</p>
           </div>
           <div className="token-grid icon-grid support-token-grid">
             {phase.synergyIds.map((synergyId) => {
               const synergy = dataset.synergiesById[synergyId];
+              const displayName = synergy?.name ?? synergyId;
               return (
                 <button
                   key={synergyId}
                   type="button"
                   className="token-button synergy-card"
-                  title={synergy?.name ?? synergyId}
-                  aria-label={`Filter by ${synergy?.name ?? synergyId}`}
-                  onClick={() => onQuickFilter(synergy?.name ?? synergyId)}
+                  title={`${displayName} — click to filter, right-click to pin`}
+                  aria-label={`Filter by ${displayName}; right-click to pin`}
+                  onMouseEnter={() => onHoverSynergy(synergyId)}
+                  onMouseLeave={() => onHoverSynergy(null)}
+                  onClick={() => onQuickFilter(displayName)}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    onToggleLock({ kind: "synergy", id: synergyId });
+                  }}
                 >
-                  <img src={synergy?.icon} alt={synergy?.name ?? synergyId} className="token-icon" />
-                  <span className="synergy-name">{synergy?.name ?? synergyId}</span>
+                  <img src={synergy?.icon} alt={displayName} className="token-icon" />
+                  <span className="synergy-name">{displayName}</span>
                   <span className="synergy-count">{synergyCounts[synergyId] ?? 0}</span>
                 </button>
               );
@@ -489,7 +622,7 @@ export function DetailPane({
         <div className="detail-card detail-card-inline">
           <div className="section-header">
             <h3>Recommended augments</h3>
-            <p>Hover to preview, click to pin</p>
+            <p>Click card to pin · click filter icon to filter</p>
           </div>
           <div className="augment-grid icon-grid support-augment-grid">
             {comp.recommendedAugmentIds.map((augmentId) =>

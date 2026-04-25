@@ -29,6 +29,7 @@ type SourceUnit = {
   championId: string;
   boardIndex?: number;
   itemIds: string[];
+  starLevel?: number;
 };
 
 type SourceAugment = {
@@ -53,6 +54,7 @@ type SourceComp = {
   augmentsTip?: string;
   mainChampionId?: string;
   mainItemId?: string;
+  teamCode?: string;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -81,10 +83,19 @@ type CDragonChampion = {
   role?: string;
 };
 
+type CDragonTraitEffect = {
+  minUnits?: number;
+  maxUnits?: number;
+  style?: number;
+  variables?: Record<string, number | string | null>;
+};
+
 type CDragonTrait = {
   apiName?: string;
   name?: string;
+  desc?: string;
   icon?: string;
+  effects?: CDragonTraitEffect[];
 };
 
 type CDragonItem = {
@@ -116,6 +127,7 @@ type Catalogs = {
   championsById: Dataset["championsById"];
   synergiesById: Dataset["synergiesById"];
   augmentsById: Dataset["augmentsById"];
+  itemsById: Dataset["itemsById"];
   championRoles: Record<string, string>;
   itemIdByApiName: Record<string, string>;
   itemNameById: Record<string, string>;
@@ -145,7 +157,7 @@ const DATASET_FILE = `tft-set${CURRENT_SET}.json`;
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
 const PUBLIC_ASSETS_DIR = path.join(PUBLIC_DIR, "assets");
-const PUBLIC_DATA_DIR = path.join(PUBLIC_DIR, "data");
+const PUBLIC_DATA_DIR = path.join(ROOT_DIR, "src", "data");
 const RAW_DIR = path.join(ROOT_DIR, "data", "raw");
 const CDRAGON_TFT_URL = "https://raw.communitydragon.org/latest/cdragon/tft/en_us.json";
 const CDRAGON_GAME_BASE_URL = "https://raw.communitydragon.org/latest/game/";
@@ -206,6 +218,22 @@ function cleanGameText(value: string | null | undefined) {
 
 function compactLines(lines: Array<string | null | undefined>) {
   return lines.map(cleanText).filter((line): line is string => Boolean(line));
+}
+
+function extractTraitBreakpoints(trait: CDragonTrait): { units: number; effect: string }[] {
+  const effects = trait.effects ?? [];
+  const seen = new Set<number>();
+  const out: { units: number; effect: string }[] = [];
+  for (const effect of effects) {
+    const units = effect.minUnits;
+    if (typeof units !== "number" || units < 1 || seen.has(units)) {
+      continue;
+    }
+    seen.add(units);
+    out.push({ units, effect: "" });
+  }
+  out.sort((a, b) => a.units - b.units);
+  return out;
 }
 
 function titleFromApiName(apiName: string) {
@@ -277,7 +305,7 @@ async function fetchJson<T>(url: string): Promise<T> {
 function queueAsset(
   assetDownloads: AssetDownload[],
   sourceUrl: string | null,
-  group: "champions" | "synergies" | "augments",
+  group: "champions" | "synergies" | "augments" | "items",
   id: string
 ) {
   const webPath = toWebPath("assets", group, `${id}.png`);
@@ -506,7 +534,34 @@ function buildCatalogs(cdragon: CDragonTftData, mobalytics: MobalyticsLookups): 
     synergiesById[id] = {
       id,
       name: trait.name,
-      icon: queueAsset(assetDownloads, cdragonAssetUrl(trait.icon), "synergies", id)
+      icon: queueAsset(assetDownloads, cdragonAssetUrl(trait.icon), "synergies", id),
+      description: cleanText(trait.desc ?? ""),
+      breakpoints: extractTraitBreakpoints(trait)
+    };
+  }
+
+  const itemsById: Dataset["itemsById"] = {};
+  const augmentApiNamesSet = new Set(setData.augments ?? []);
+  const componentApiNamesSet = new Set(Object.keys(COMPONENT_API_TO_ID));
+  for (const item of allItems) {
+    if (!item.apiName || !item.name || !item.icon) {
+      continue;
+    }
+    if (augmentApiNamesSet.has(item.apiName)) {
+      continue;
+    }
+    if (!item.apiName.startsWith("TFT_Item_") && !componentApiNamesSet.has(item.apiName)) {
+      continue;
+    }
+    const id = itemIdByApiName[item.apiName] ?? normalizeId(item.name);
+    if (!id || itemsById[id]) {
+      continue;
+    }
+    itemsById[id] = {
+      id,
+      name: item.name,
+      description: cleanGameText(item.desc),
+      icon: queueAsset(assetDownloads, cdragonAssetUrl(item.icon), "items", id)
     };
   }
 
@@ -554,6 +609,7 @@ function buildCatalogs(cdragon: CDragonTftData, mobalytics: MobalyticsLookups): 
     championsById,
     synergiesById,
     augmentsById,
+    itemsById,
     championRoles,
     itemIdByApiName,
     itemNameById,
@@ -659,12 +715,21 @@ async function loadMobalyticsLookups(): Promise<MobalyticsLookups> {
           if (!championId) {
             return null;
           }
+          const rawStar =
+            position.champion?.level ??
+            position.champion?.starLevel ??
+            position.champion?.star ??
+            position.champion?.stars ??
+            position.starLevel ??
+            position.star;
+          const starLevel = typeof rawStar === "number" && rawStar >= 1 && rawStar <= 3 ? Math.round(rawStar) : undefined;
           return {
             championId,
             boardIndex: Number.isFinite(Number(position.coordinates))
               ? Number(position.coordinates)
               : undefined,
-            itemIds: (position.champion?.items ?? []).map((item: any) => normalizeId(item.slug)).filter(Boolean)
+            itemIds: (position.champion?.items ?? []).map((item: any) => normalizeId(item.slug)).filter(Boolean),
+            starLevel
           } satisfies SourceUnit;
         })
         .filter((unit: SourceUnit | null): unit is SourceUnit => Boolean(unit));
@@ -692,6 +757,10 @@ async function loadMobalyticsLookups(): Promise<MobalyticsLookups> {
       } satisfies SourceComp;
     });
 
+  if (process.env.SKIP_TEAM_CODES !== "1") {
+    await populateMobalyticsTeamCodes(comps);
+  }
+
   await ensureDirectory(RAW_DIR);
   await fs.writeFile(
     path.join(RAW_DIR, `mobalytics-set${CURRENT_SET}-snapshot.json`),
@@ -706,6 +775,65 @@ async function loadMobalyticsLookups(): Promise<MobalyticsLookups> {
     augmentDescriptionByApi,
     championUnlocksById
   };
+}
+
+async function populateMobalyticsTeamCodes(comps: SourceComp[]) {
+  if (comps.length === 0) return;
+  let chromium: typeof import("playwright").chromium;
+  try {
+    ({ chromium } = await import("playwright"));
+  } catch {
+    console.warn("playwright not available; skipping team code scrape");
+    return;
+  }
+
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const ctx = await browser.newContext({ permissions: ["clipboard-read", "clipboard-write"] });
+    const page = await ctx.newPage();
+
+    let captured: string | null = null;
+    await page.exposeFunction("__captureTeamCode", (value: unknown) => {
+      if (typeof value === "string" && /TFTSet\d+/.test(value)) {
+        captured = value;
+      }
+    });
+    await page.addInitScript(() => {
+      const orig = navigator.clipboard.writeText.bind(navigator.clipboard);
+      navigator.clipboard.writeText = async (text: string) => {
+        // @ts-ignore
+        window.__captureTeamCode(String(text));
+        return orig(text);
+      };
+    });
+
+    let okCount = 0;
+    for (let i = 0; i < comps.length; i++) {
+      const comp = comps[i];
+      captured = null;
+      try {
+        await page.goto(comp.url, { waitUntil: "domcontentloaded", timeout: 30000 });
+        const target = page.getByRole("button", { name: /import comp to overlay and copy team code/i });
+        await target.first().click({ timeout: 8000 });
+        const start = Date.now();
+        while (captured === null && Date.now() - start < 4000) {
+          await page.waitForTimeout(150);
+        }
+        if (captured) {
+          comp.teamCode = captured;
+          okCount += 1;
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message.slice(0, 80) : String(err);
+        console.warn(`team code scrape failed for ${comp.url}: ${message}`);
+      }
+      if ((i + 1) % 5 === 0 || i + 1 === comps.length) {
+        console.log(`  team-code scrape ${i + 1}/${comps.length} (got ${okCount})`);
+      }
+    }
+  } finally {
+    await browser.close();
+  }
 }
 
 async function loadTftAcademySourceComps(catalogs: Pick<Catalogs, "itemIdByApiName">) {
@@ -1049,6 +1177,7 @@ function unitsToPhaseData(
     itemIds: []
   }));
 
+  const championLevels: Record<string, number> = {};
   for (const unit of inferBoardIndexes(uniqueUnits(sourceUnits), catalogs)) {
     if (typeof unit.boardIndex !== "number" || unit.boardIndex < 0 || unit.boardIndex > 27) {
       continue;
@@ -1062,6 +1191,9 @@ function unitsToPhaseData(
       locked: catalogs.championsById[unit.championId].requiresUnlock,
       itemIds: unit.itemIds
     };
+    if (typeof unit.starLevel === "number" && unit.starLevel > 1) {
+      championLevels[unit.championId] = Math.max(championLevels[unit.championId] ?? 1, unit.starLevel);
+    }
   }
 
   const championIds = Array.from(
@@ -1075,7 +1207,7 @@ function unitsToPhaseData(
     )
   );
 
-  return { boardSlots, championIds, synergyIds };
+  return { boardSlots, championIds, synergyIds, championLevels };
 }
 
 function buildLevelGuide(playstyle: string | undefined): GuideSection {
@@ -1274,6 +1406,7 @@ function buildCompFromMergedEntry(
   ).slice(0, 9);
 
   const idBase = normalizeId(base.title) || normalizeId(base.externalId);
+  const teamCode = contributorsByPriority.find((source) => source.teamCode)?.teamCode;
   return {
     id: idBase,
     title: base.title,
@@ -1287,7 +1420,8 @@ function buildCompFromMergedEntry(
     recommendedAugmentIds: augmentIds,
     guide: buildGuide(base, contributorsByPriority, catalogs),
     componentDemand: buildComponentDemand(finalUnits, catalogs),
-    notes: `Merged from ${sourceRefs.length} source${sourceRefs.length === 1 ? "" : "s"}.`
+    notes: `Merged from ${sourceRefs.length} source${sourceRefs.length === 1 ? "" : "s"}.`,
+    teamCode
   };
 }
 
@@ -1342,6 +1476,17 @@ export async function buildDataset() {
     Object.entries(catalogs.synergiesById).filter(([synergyId]) => usedSynergyIds.has(synergyId))
   ) as Dataset["synergiesById"];
 
+  const usedItemIds = new Set(
+    comps.flatMap((comp) =>
+      (["early", "mid", "late"] as const).flatMap((phase) =>
+        comp.phases[phase].boardSlots.flatMap((slot) => slot.itemIds)
+      )
+    )
+  );
+  const itemsById = Object.fromEntries(
+    Object.entries(catalogs.itemsById).filter(([itemId]) => usedItemIds.has(itemId))
+  ) as Dataset["itemsById"];
+
   const dataset = datasetSchema.parse({
     meta: {
       schemaVersion: "1",
@@ -1356,7 +1501,8 @@ export async function buildDataset() {
     comps,
     championsById: catalogs.championsById,
     augmentsById,
-    synergiesById
+    synergiesById,
+    itemsById
   });
 
   await downloadAssets(catalogs.assetDownloads);

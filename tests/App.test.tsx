@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App";
-import generatedDataset from "../public/data/tft-set17.json";
+import generatedDataset from "../src/data/tft-set17.json";
 import { datasetSchema } from "../shared/tft";
 
 const dataset = datasetSchema.parse(generatedDataset);

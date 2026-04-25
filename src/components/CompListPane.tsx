@@ -130,7 +130,7 @@ function ComponentDemandStrip({ comp }: { comp: Comp }) {
           title={`${component.count}x ${component.label}`}
         >
           <img
-            src={`/assets/items/${component.componentId}.png`}
+            src={`${import.meta.env.BASE_URL}assets/items/${component.componentId}.png`}
             alt={component.label}
             className="demand-pill-icon"
           />
@@ -260,6 +260,24 @@ export function CompListPane({ comps, dataset, phaseFilter, onQuickFilter }: Com
                       setLiveInspectors((current) => ({
                         ...current,
                         [comp.id]: id ? { kind: "augment", id } : null
+                      }));
+                    }}
+                    onHoverSynergy={(id) => {
+                      if (lockedInspectors[comp.id]) {
+                        return;
+                      }
+                      setLiveInspectors((current) => ({
+                        ...current,
+                        [comp.id]: id ? { kind: "synergy", id } : null
+                      }));
+                    }}
+                    onHoverItem={(id) => {
+                      if (lockedInspectors[comp.id]) {
+                        return;
+                      }
+                      setLiveInspectors((current) => ({
+                        ...current,
+                        [comp.id]: id ? { kind: "item", id } : null
                       }));
                     }}
                     onToggleLock={(target) => {

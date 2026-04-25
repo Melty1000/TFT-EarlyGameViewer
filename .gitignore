@@ -8,3 +8,18 @@ test-results/
 /data/raw/
 /legacy/
 /public/data/tft-set16.json
+
+# Electron-builder output: keep only the portable .exe; ignore intermediate artifacts
+release/*
+!release/*.exe
+
+# Abandoned static-portable folder (superseded by Electron build)
+/TFT-EarlyGameViewer-portable/
+
+# Local sync/probe logs
+/sync-out.txt
+/probe-out.txt
+/build-out.txt
+
+# Local IDE/agent settings
+/.claude/

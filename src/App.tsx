@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { CompListPane } from "./components/CompListPane";
+import { TitleBar } from "./components/TitleBar";
 import { compMatchesFilters, type PhaseFilter } from "./lib/filters";
 import { useDataset } from "./lib/useDataset";
 
@@ -54,6 +55,7 @@ export default function App() {
   if (isLoading) {
     return (
       <main className="app-shell loading-shell">
+        <TitleBar />
         <div className="status-card">
           <p className="eyebrow">Loading</p>
           <h1>Preparing the Set 17 comp board.</h1>
@@ -65,6 +67,7 @@ export default function App() {
   if (error || !data) {
     return (
       <main className="app-shell loading-shell">
+        <TitleBar />
         <div className="status-card error">
           <p className="eyebrow">Dataset error</p>
           <h1>The normalized TFT dataset could not be loaded.</h1>
@@ -77,6 +80,7 @@ export default function App() {
 
   return (
     <main className="app-shell">
+      <TitleBar />
       <header className="topbar">
         <div className="topbar-left">
           <h1 className="site-title">

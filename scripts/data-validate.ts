@@ -5,7 +5,7 @@ import { datasetSchema } from "../shared/tft";
 import { validateDataset } from "./pipeline";
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const DATASET_PATH = path.join(ROOT_DIR, "public", "data", "tft-set17.json");
+const DATASET_PATH = path.join(ROOT_DIR, "src", "data", "tft-set17.json");
 
 async function main() {
   const dataset = datasetSchema.parse(JSON.parse(await fs.readFile(DATASET_PATH, "utf8")));

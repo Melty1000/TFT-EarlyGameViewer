@@ -1,24 +1,53 @@
+@font-face {
+  font-family: "Rajdhani";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/Rajdhani-Regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Rajdhani";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./fonts/Rajdhani-SemiBold.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Rajdhani";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./fonts/Rajdhani-Bold.ttf") format("truetype");
+}
+
 :root {
   color-scheme: dark;
-  --bg-0: #08090c;
-  --bg-1: #0d1015;
-  --bg-2: #141820;
-  --bg-3: #1b202a;
-  --bg-hover: #181d26;
-  --surface: #11161e;
-  --surface-2: #0f141c;
-  --border: #1f2531;
-  --border-bright: #2a3240;
-  --gold: #c8a84e;
-  --gold-dim: rgba(200, 168, 78, 0.14);
+  --accent: #ffaa00;
+  --accent-hover: #ffcc33;
+  --accent-glow: rgba(255, 170, 0, 0.3);
+  --accent-dim: rgba(255, 170, 0, 0.1);
+  --bg-glass: rgba(15, 15, 20, 0.75);
+  --bg-glass-heavy: rgba(10, 10, 12, 0.9);
+  --ease-premium: cubic-bezier(0.4, 0, 0.2, 1);
+  --bg-0: #0a0a0c;
+  --bg-1: #101015;
+  --bg-2: #16161d;
+  --bg-3: #1d1d26;
+  --bg-hover: #1a1a22;
+  --surface: #11111a;
+  --surface-2: #0d0d14;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-bright: rgba(255, 255, 255, 0.14);
+  --gold: var(--accent);
+  --gold-dim: var(--accent-dim);
   --cyan: #3ecfcf;
-  --text: #e8eaed;
-  --text-soft: #adb3be;
-  --text-dim: #6b7280;
+  --text: #ffffff;
+  --text-soft: #a0a0a0;
+  --text-dim: rgba(255, 255, 255, 0.4);
   --radius: 8px;
   --radius-sm: 6px;
-  --font-head: "Segoe UI Variable Display", "Bahnschrift", "Trebuchet MS", sans-serif;
-  --font-body: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  --font-head: "Rajdhani", "Segoe UI Variable Display", "Bahnschrift", sans-serif;
+  --font-body: "Rajdhani", "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 
 *,
@@ -35,11 +64,13 @@ body,
 
 body {
   margin: 0;
-  background: var(--bg-0);
+  padding: 8px;
+  background: #050507;
   color: var(--text);
   font-family: var(--font-body);
   font-size: 14px;
   line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
 }
 
 button,
@@ -65,8 +96,16 @@ p {
 }
 
 .app-shell {
-  min-height: 100vh;
+  min-height: calc(100vh - 16px);
   background: linear-gradient(180deg, var(--bg-0) 0%, #0b0d12 100%);
+  border: 1px solid var(--accent-dim);
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+    0 0 24px rgba(255, 170, 0, 0.08),
+    0 20px 60px rgba(0, 0, 0, 0.8);
+  overflow: hidden;
+  position: relative;
 }
 
 .loading-shell {
@@ -109,8 +148,10 @@ p {
   gap: 16px;
   min-height: 56px;
   padding: 0 20px;
-  background: var(--bg-1);
-  border-bottom: 1px solid var(--border);
+  background: var(--bg-glass-heavy);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--accent-dim);
 }
 
 .topbar-left,
@@ -128,9 +169,10 @@ p {
 
 .site-title {
   font-family: var(--font-head);
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -801,6 +843,21 @@ p {
   cursor: pointer;
 }
 
+.board-slot-trigger {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: block;
+}
+
+.board-slot-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .board-slot-shell {
   width: 100%;
   height: 100%;
@@ -894,6 +951,7 @@ p {
   gap: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
+  min-height: 240px;
 }
 
 .inspector-body {
@@ -934,6 +992,8 @@ p {
   display: grid;
   gap: 12px;
   align-content: start;
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 .mini-chip-row {
@@ -1210,14 +1270,15 @@ p {
 
   .list-columns,
   .row-header-trigger {
-    grid-template-columns: 170px minmax(160px, 1fr);
+    grid-template-columns: 140px minmax(180px, 1fr) 130px 170px;
+    gap: 4px;
+    padding-left: 12px;
+    padding-right: 12px;
   }
 
-  .list-columns > div:nth-child(3),
-  .list-columns > div:nth-child(4),
-  .row-header-trigger > div:nth-child(3),
-  .row-header-trigger > div:nth-child(4) {
-    display: none;
+  .list-columns > div,
+  .row-header-trigger > div {
+    padding: 0 8px;
   }
 
   .detail-grid,
@@ -1290,4 +1351,221 @@ p {
   .levelling-guide-card {
     grid-template-columns: 1fr;
   }
+}
+
+/* ===================================
+   MELTY TITLEBAR (Electron frameless)
+   =================================== */
+.titlebar {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  background: var(--bg-glass-heavy);
+  border-bottom: 1px solid var(--accent-dim);
+  user-select: none;
+  position: relative;
+  z-index: 200;
+}
+
+.titlebar-drag {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 14px;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.titlebar-brand {
+  font-family: var(--font-head);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.titlebar-brand .accent {
+  color: var(--accent);
+}
+
+.titlebar-brand-sub {
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.titlebar-controls {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.titlebar-btn {
+  width: 46px;
+  height: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--duration-fast, 0.15s) var(--ease-premium), color var(--duration-fast, 0.15s) var(--ease-premium);
+  padding: 0;
+}
+
+.titlebar-btn:hover {
+  background: rgba(255, 170, 0, 0.12);
+  color: var(--accent-hover);
+}
+
+.titlebar-btn:active {
+  background: rgba(255, 170, 0, 0.18);
+}
+
+.titlebar-btn-close:hover {
+  background: #c42b1c;
+  color: #ffffff;
+}
+
+.titlebar-btn-close:active {
+  background: #a02216;
+  color: #ffffff;
+}
+
+.titlebar-btn:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* ===================================
+   HEX BOARD: items, star badges
+   =================================== */
+.board-item-strip {
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  z-index: 2;
+  pointer-events: auto;
+}
+
+.board-item-icon {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid rgba(255, 170, 0, 0.4);
+  background: rgba(8, 8, 12, 0.94);
+  border-radius: 3px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  transition: border-color var(--duration-fast, 0.15s) var(--ease-premium), transform var(--duration-fast, 0.15s) var(--ease-premium);
+}
+
+.board-item-icon img {
+  width: 14px;
+  height: 14px;
+  object-fit: cover;
+  display: block;
+}
+
+.board-item-icon:hover {
+  border-color: var(--accent);
+  transform: scale(1.15);
+  z-index: 3;
+}
+
+.board-item-icon:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.champ-star-badge {
+  position: absolute;
+  top: -4px;
+  right: -2px;
+  z-index: 2;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(8, 8, 12, 0.94);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: 0 0 4px rgba(255, 170, 0, 0.5);
+  pointer-events: none;
+}
+
+.champ-star-badge.stars-2 {
+  border-color: rgba(192, 192, 192, 0.7);
+  color: #d8d8d8;
+  text-shadow: 0 0 3px rgba(255, 255, 255, 0.3);
+}
+
+.champ-star-badge.stars-3 {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(40, 24, 0, 0.94);
+}
+
+/* ===================================
+   DETAIL TOOLBAR: copy code button
+   =================================== */
+.detail-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.copy-code-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 170, 0, 0.08);
+  color: var(--accent);
+  font-family: var(--font-head);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--duration-fast, 0.15s) var(--ease-premium), border-color var(--duration-fast, 0.15s) var(--ease-premium);
+}
+
+.copy-code-btn:hover {
+  background: rgba(255, 170, 0, 0.18);
+  border-color: var(--accent);
+}
+
+.copy-code-btn.is-copied {
+  background: rgba(104, 211, 125, 0.18);
+  border-color: rgba(104, 211, 125, 0.6);
+  color: #68d37d;
+}
+
+.copy-code-btn.is-error {
+  background: rgba(224, 85, 85, 0.18);
+  border-color: rgba(224, 85, 85, 0.6);
+  color: #e05555;
 }
