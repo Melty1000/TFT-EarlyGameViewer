@@ -16,7 +16,7 @@
     "data:scrape-live": "tsx scripts/scrape-mobalytics.ts",
     "icons:generate": "node scripts/generate-icon.mjs",
     "electron:dev": "electron .",
-    "electron:build": "npm run build && electron-builder --win portable",
+    "electron:build": "npm run build && electron-builder --win nsis",
     "prepare": "husky"
   },
   "dependencies": {
@@ -78,15 +78,21 @@
       "icon": "build/icon.ico",
       "target": [
         {
-          "target": "portable",
+          "target": "nsis",
           "arch": "x64"
         }
       ],
-      "artifactName": "opnr-gg-${version}-portable.exe",
+      "artifactName": "opnr-gg-${version}-${arch}.${ext}",
       "signAndEditExecutable": false
     },
-    "portable": {
-      "artifactName": "opnr-gg-${version}-portable.exe"
+    "nsis": {
+      "artifactName": "opnr-gg-${version}-setup.${ext}",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "opnr.gg"
     },
     "asar": true
   }

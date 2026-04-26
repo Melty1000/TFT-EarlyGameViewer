@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App";
 import generatedDataset from "../src/data/tft-set17.json";
+import { COMPONENT_RECIPES } from "../shared/normalization";
 import { datasetSchema } from "../shared/tft";
 
 const dataset = datasetSchema.parse(generatedDataset);
@@ -163,5 +164,57 @@ describe("App", () => {
     await user.click(within(row).getByRole("button", { name: `Show early board for ${guidedComp.title}` }));
 
     expect(within(row).getByText(guidedComp.guide.phases.early[0].title)).toBeInTheDocument();
+  });
+
+  it("surfaces build rank, playstyle, recommended items, and item recipes", async () => {
+    const user = userEvent.setup();
+    const comp = dataset.comps.find((candidate) => {
+      const hasRank = candidate.sources.some((source) => source.tier);
+      const hasStyle = candidate.guide.overview
+        .find((section) => section.title === "How to play")
+        ?.lines.some((line) => line.startsWith("Style: "));
+      const hasRecipeItem = candidate.phases.late.boardSlots.some((slot) =>
+        slot.itemIds.some((itemId) => COMPONENT_RECIPES[itemId] || COMPONENT_RECIPES[itemId.replace(/-s-/g, "s-").replace(/-s$/g, "s")] || COMPONENT_RECIPES[itemId.replace(/-/g, "")])
+      );
+      return hasRank && hasStyle && hasRecipeItem;
+    });
+
+    expect(comp).toBeDefined();
+    if (!comp) {
+      return;
+    }
+
+    const rankedSource = comp.sources.find((source) => source.tier);
+    const style = comp.guide.overview
+      .find((section) => section.title === "How to play")
+      ?.lines.find((line) => line.startsWith("Style: "))
+      ?.replace(/^Style:\s*/i, "");
+    const itemSlot = comp.phases.late.boardSlots.find((slot) =>
+      slot.championId && slot.itemIds.some((itemId) => COMPONENT_RECIPES[itemId] || COMPONENT_RECIPES[itemId.replace(/-s-/g, "s-").replace(/-s$/g, "s")] || COMPONENT_RECIPES[itemId.replace(/-/g, "")])
+    );
+
+    expect(rankedSource).toBeDefined();
+    expect(style).toBeDefined();
+    expect(itemSlot).toBeDefined();
+    if (!rankedSource || !style || !itemSlot?.championId) {
+      return;
+    }
+
+    const champion = dataset.championsById[itemSlot.championId];
+    const item = dataset.itemsById[itemSlot.itemIds[0]];
+
+    render(<App />);
+
+    const row = await ensureExpanded(user, comp.title);
+
+    expect(within(row).getAllByText(`${rankedSource.name} ${rankedSource.tier}`)[0]).toBeInTheDocument();
+    expect(within(row).getAllByText(style)[0]).toBeInTheDocument();
+
+    await user.hover(within(row).getAllByRole("button", { name: `Inspect champion ${champion.name}` })[0]);
+    expect(await within(row).findByText("Recommended items")).toBeInTheDocument();
+    expect(within(row).getByText(item.name)).toBeInTheDocument();
+
+    await user.hover(within(row).getAllByRole("button", { name: `Inspect item ${item.name}` })[0]);
+    expect(await within(row).findByText("Recipe")).toBeInTheDocument();
   });
 });

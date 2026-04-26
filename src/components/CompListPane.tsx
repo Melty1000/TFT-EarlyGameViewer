@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { Comp, Dataset } from "../../shared/tft";
 import type { PhaseKey } from "../../shared/normalization";
+import { getCompPlaystyle, getCompRankTags } from "../lib/compMeta";
 import { type PhaseFilter } from "../lib/filters";
 import { DetailPane, type DetailTab, type InspectorTarget } from "./DetailPane";
 
@@ -197,6 +198,8 @@ export function CompListPane({ comps, dataset, phaseFilter, onQuickFilter }: Com
           const previewChampions = comp.phases[previewPhase].championIds
             .map((championId) => dataset.championsById[championId])
             .filter(Boolean);
+          const rankTags = getCompRankTags(comp);
+          const playstyle = getCompPlaystyle(comp);
           const isExpanded = expandedCompIds.includes(comp.id);
           const selectedTab = selectedTabs[comp.id] ?? getDefaultDetailTab(phaseFilter);
           const activePhase = activePhases[comp.id] ?? getDefaultBoardPhase(phaseFilter);
@@ -214,6 +217,14 @@ export function CompListPane({ comps, dataset, phaseFilter, onQuickFilter }: Com
               >
                 <div className="row-name">
                   <h2>{comp.title}</h2>
+                  <div className="row-meta-line" aria-label={`${comp.title} ranks and strategy`}>
+                    {rankTags.slice(0, 4).map((rank) => (
+                      <span key={rank.key} className={`rank-chip rank-${rank.tier.toLowerCase()}`}>
+                        {rank.label}
+                      </span>
+                    ))}
+                    {playstyle ? <span className="style-chip">{playstyle}</span> : null}
+                  </div>
                 </div>
 
                 <AnimatedChampionStrip

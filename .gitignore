@@ -9,9 +9,8 @@ test-results/
 /legacy/
 /public/data/tft-set16.json
 
-# Electron-builder output: keep only the portable .exe; ignore intermediate artifacts
+# Electron-builder output is generated locally or uploaded as a GitHub Release asset.
 release/*
-!release/*.exe
 
 # Abandoned static-portable folder (superseded by Electron build)
 /TFT-EarlyGameViewer-portable/

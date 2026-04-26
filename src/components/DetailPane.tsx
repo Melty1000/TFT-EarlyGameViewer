@@ -1,6 +1,8 @@
 import { useState } from "react";
-import type { Augment, Champion, Comp, Dataset, Item, Synergy } from "../../shared/tft";
+import type { Augment, Champion, Comp, Dataset, Synergy } from "../../shared/tft";
 import type { PhaseKey } from "../../shared/normalization";
+import { getCompPlaystyle, getCompRankTags } from "../lib/compMeta";
+import { getItemDisplay } from "../lib/items";
 
 export type InspectorTarget =
   | { kind: "champion"; id: string }
@@ -53,7 +55,9 @@ function cleanGameText(value: string) {
 }
 
 function buildInspectorModel(
+  comp: Comp,
   dataset: Dataset,
+  activePhase: PhaseKey,
   inspector: InspectorTarget
 ): {
   title: string;
@@ -63,6 +67,8 @@ function buildInspectorModel(
   icon: string;
   accent: string;
   unlockCondition?: string | null;
+  recommendedItems?: ReturnType<typeof getItemDisplay>[];
+  recipe?: ReturnType<typeof getItemDisplay>["recipe"];
 } | null {
   if (!inspector) {
     return null;
@@ -73,6 +79,18 @@ function buildInspectorModel(
     if (!champion) {
       return null;
     }
+    const itemIds = [
+      ...new Set(
+        [
+          ...comp.phases[activePhase].boardSlots,
+          ...comp.phases.late.boardSlots,
+          ...comp.phases.mid.boardSlots,
+          ...comp.phases.early.boardSlots
+        ]
+          .filter((slot) => slot.championId === champion.id)
+          .flatMap((slot) => slot.itemIds)
+      )
+    ];
     return {
       title: champion.name,
       subtitle: champion.abilityName,
@@ -80,7 +98,8 @@ function buildInspectorModel(
       chips: champion.traitIds.map((traitId) => dataset.synergiesById[traitId]?.name ?? traitId),
       icon: champion.icon,
       accent: `Cost ${champion.cost}`,
-      unlockCondition: champion.requiresUnlock ? champion.unlockCondition : null
+      unlockCondition: champion.requiresUnlock ? champion.unlockCondition : null,
+      recommendedItems: itemIds.map((itemId) => getItemDisplay(dataset, itemId))
     };
   }
 
@@ -100,26 +119,14 @@ function buildInspectorModel(
   }
 
   if (inspector.kind === "item") {
-    const item: Item | undefined = dataset.itemsById?.[inspector.id];
-    const fallbackName = inspector.id
-      .split("-")
-      .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-      .join(" ");
-    if (!item) {
-      return {
-        title: fallbackName,
-        body: "Item details were not captured in this dataset build.",
-        chips: ["Item"],
-        icon: `${import.meta.env.BASE_URL}assets/items/${inspector.id}.png`,
-        accent: "Item"
-      };
-    }
+    const item = getItemDisplay(dataset, inspector.id);
     return {
       title: item.name,
       body: cleanGameText(item.description) || "No item description was captured.",
       chips: ["Item"],
       icon: item.icon,
-      accent: "Item"
+      accent: "Item",
+      recipe: item.recipe
     };
   }
 
@@ -193,21 +200,19 @@ function renderChampionTile(
       {itemIds.length > 0 ? (
         <div className="board-item-strip">
           {itemIds.slice(0, 3).map((itemId, index) => {
-            const item = dataset.itemsById?.[itemId];
-            const displayName = item?.name ?? itemId.replace(/-/g, " ");
-            const iconUrl = item?.icon ?? `${import.meta.env.BASE_URL}assets/items/${itemId}.png`;
+            const item = getItemDisplay(dataset, itemId);
             return (
               <button
                 key={`${itemId}-${index}`}
                 type="button"
                 className="board-item-icon"
-                title={`${displayName} — click to filter, right-click to pin`}
-                aria-label={`Filter by ${displayName}; right-click to pin`}
+                title={`${item.name} — click to filter, right-click to pin`}
+                aria-label={`Inspect item ${item.name}`}
                 onMouseEnter={() => onHoverItem(itemId)}
                 onMouseLeave={() => onHoverItem(null)}
                 onClick={(event) => {
                   event.stopPropagation();
-                  onQuickFilter(displayName);
+                  onQuickFilter(item.name);
                 }}
                 onContextMenu={(event) => {
                   event.preventDefault();
@@ -215,7 +220,7 @@ function renderChampionTile(
                   onToggleLock({ kind: "item", id: itemId });
                 }}
               >
-                <img src={iconUrl} alt={displayName} />
+                <img src={item.icon} alt={item.name} />
               </button>
             );
           })}
@@ -414,7 +419,9 @@ export function DetailPane({
 }: DetailPaneProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const phase = comp.phases[activePhase];
-  const activeInspector = buildInspectorModel(dataset, lockedInspector ?? inspector);
+  const activeInspector = buildInspectorModel(comp, dataset, activePhase, lockedInspector ?? inspector);
+  const rankTags = getCompRankTags(comp);
+  const playstyle = getCompPlaystyle(comp);
   const boardCells = phase.boardSlots.map((slot, slotIndex) => {
     const row = Math.floor(slotIndex / 7);
     const column = slotIndex % 7;
@@ -447,23 +454,33 @@ export function DetailPane({
   return (
     <div className="detail-embedded">
       <div className="detail-toolbar">
-        <div className="segmented-control phase-tabs">
-          {DETAIL_OPTIONS.map((option) => (
-            <button
-              key={option}
-              type="button"
-              className={option === selectedTab ? "segment active" : "segment"}
-              aria-label={option === "overview" ? `Show overview for ${comp.title}` : `Show ${option} board for ${comp.title}`}
-              onClick={() => {
-                onSelectTab(option);
-                if (option !== "overview") {
-                  onActivePhaseChange(option);
-                }
-              }}
-            >
-              {option}
-            </button>
-          ))}
+        <div className="detail-tab-cluster">
+          <div className="segmented-control phase-tabs">
+            {DETAIL_OPTIONS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                className={option === selectedTab ? "segment active" : "segment"}
+                aria-label={option === "overview" ? `Show overview for ${comp.title}` : `Show ${option} board for ${comp.title}`}
+                onClick={() => {
+                  onSelectTab(option);
+                  if (option !== "overview") {
+                    onActivePhaseChange(option);
+                  }
+                }}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+          <div className="expanded-build-meta">
+            {playstyle ? <span className="style-chip large">{playstyle}</span> : null}
+            {rankTags.slice(0, 4).map((rank) => (
+              <span key={rank.key} className={`rank-chip rank-${rank.tier.toLowerCase()}`}>
+                {rank.label}
+              </span>
+            ))}
+          </div>
         </div>
         <div className="detail-toolbar-actions">
           {comp.teamCode ? (
@@ -572,6 +589,33 @@ export function DetailPane({
                   <div>
                     <p className="unlock-callout-label">Unlock before purchase</p>
                     <p className="unlock-callout-copy">{activeInspector.unlockCondition}</p>
+                  </div>
+                </div>
+              ) : null}
+              {activeInspector.recommendedItems?.length ? (
+                <div className="inspector-section">
+                  <h5>Recommended items</h5>
+                  <div className="inspector-item-grid">
+                    {activeInspector.recommendedItems.map((item) => (
+                      <div key={item.id} className="inspector-item-card">
+                        <img src={item.icon} alt={item.name} className="inspector-item-icon" />
+                        <span>{item.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {activeInspector.recipe?.length ? (
+                <div className="inspector-section">
+                  <h5>Recipe</h5>
+                  <div className="recipe-row">
+                    {activeInspector.recipe.map((component, index) => (
+                      <div key={component.id} className="recipe-component">
+                        {index > 0 ? <span className="recipe-plus">+</span> : null}
+                        <img src={component.icon} alt={component.name} className="recipe-icon" />
+                        <span>{component.name}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ) : null}

@@ -41,8 +41,8 @@ export function TitleBar() {
           aria-label="Minimize"
           onClick={() => void shell.minimize()}
         >
-          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-            <line x1="1" y1="5" x2="9" y2="5" stroke="currentColor" strokeWidth="1.2" />
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+            <line x1="2" y1="7" x2="12" y2="7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
         </button>
         <button
@@ -52,13 +52,13 @@ export function TitleBar() {
           onClick={() => void shell.toggleMaximize()}
         >
           {isMaximized ? (
-            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-              <rect x="2.5" y="0.5" width="7" height="7" fill="none" stroke="currentColor" strokeWidth="1" />
-              <rect x="0.5" y="2.5" width="7" height="7" fill="var(--bg-glass-heavy, #0d0d12)" stroke="currentColor" strokeWidth="1" />
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+              <rect x="5" y="2" width="7" height="7" fill="none" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="2" y="5" width="7" height="7" fill="var(--bg-glass-heavy, #0d0d12)" stroke="currentColor" strokeWidth="1.5" />
             </svg>
           ) : (
-            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-              <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1" />
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+              <rect x="2.25" y="2.25" width="9.5" height="9.5" fill="none" stroke="currentColor" strokeWidth="1.7" />
             </svg>
           )}
         </button>
@@ -68,9 +68,9 @@ export function TitleBar() {
           aria-label="Close"
           onClick={() => void shell.close()}
         >
-          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-            <line x1="1" y1="1" x2="9" y2="9" stroke="currentColor" strokeWidth="1.2" />
-            <line x1="9" y1="1" x2="1" y2="9" stroke="currentColor" strokeWidth="1.2" />
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+            <line x1="3" y1="3" x2="11" y2="11" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+            <line x1="11" y1="3" x2="3" y2="11" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
           </svg>
         </button>
       </div>
