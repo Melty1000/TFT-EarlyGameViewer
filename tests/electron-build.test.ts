@@ -15,14 +15,15 @@ function readPackageJson() {
 }
 
 describe("Electron distribution config", () => {
-  it("does not ship the crashing portable self-extractor target", () => {
+  it("ships the portable executable by default and keeps installer packaging explicit", () => {
     const packageJson = readPackageJson();
     const targets = packageJson.build.win.target.map((target) => target.target);
 
-    expect(packageJson.scripts["electron:build"]).toContain("nsis");
+    expect(packageJson.scripts["electron:build"]).toContain("portable");
+    expect(packageJson.scripts["electron:build"]).not.toContain("nsis");
+    expect(packageJson.scripts["electron:build:installer"]).toContain("nsis");
     expect(packageJson.scripts["electron:build"]).not.toContain("zip");
-    expect(targets).toEqual(["nsis"]);
-    expect(targets).not.toContain("portable");
+    expect(targets).toEqual(["nsis", "portable"]);
     expect(packageJson.build.portable).toBeUndefined();
     expect(packageJson.build.nsis?.oneClick).toBe(false);
   });

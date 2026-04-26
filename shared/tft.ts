@@ -11,7 +11,8 @@ export const boardSlotSchema = z.object({
   index: z.number().int().min(0).max(27),
   championId: z.string().nullable(),
   locked: z.boolean(),
-  itemIds: z.array(z.string().min(1))
+  itemIds: z.array(z.string().min(1)),
+  starLevel: z.number().int().min(1).max(3).default(1)
 });
 
 export const phaseSchema = z.object({

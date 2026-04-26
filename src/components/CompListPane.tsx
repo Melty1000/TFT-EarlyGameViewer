@@ -1,8 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { Comp, Dataset } from "../../shared/tft";
 import type { PhaseKey } from "../../shared/normalization";
-import { getCompPlaystyle, getCompRankTags } from "../lib/compMeta";
+import {
+  getCompDisplayTitle,
+  getCompPlaystyle,
+  getCompRankTags,
+  getPlaystyleIcon,
+  getPlaystyleLabel,
+  getRankIcon,
+  getSourceAbbreviation,
+  getSourceDisplayName
+} from "../lib/compMeta";
 import { type PhaseFilter } from "../lib/filters";
 import { DetailPane, type DetailTab, type InspectorTarget } from "./DetailPane";
 
@@ -12,6 +21,42 @@ type CompListPaneProps = {
   phaseFilter: PhaseFilter;
   onQuickFilter: (label: string) => void;
 };
+
+type CompRow = {
+  key: string;
+  title: string;
+  comp: Comp;
+};
+
+type SortKey = "name" | "source" | "rank" | "style";
+type SortDirection = "asc" | "desc";
+
+const AUGMENT_TIER_ORDER: Record<string, number> = {
+  S: 0,
+  A: 1,
+  B: 2,
+  C: 3,
+  D: 4,
+  Unknown: 5
+};
+
+const RANK_SORT_ORDER: Record<string, number> = {
+  X: 0,
+  S: 1,
+  A: 2,
+  B: 3,
+  C: 4,
+  D: 5,
+  Unknown: 6
+};
+
+function buildCompRows(visibleComps: Comp[]): CompRow[] {
+  return visibleComps.map((comp) => ({
+    key: comp.id,
+    title: getCompDisplayTitle(comp),
+    comp
+  }));
+}
 
 function getPreviewPhase(phaseFilter: PhaseFilter): PhaseKey {
   return phaseFilter === "all" ? "early" : phaseFilter;
@@ -23,6 +68,32 @@ function getDefaultDetailTab(phaseFilter: PhaseFilter): DetailTab {
 
 function getDefaultBoardPhase(phaseFilter: PhaseFilter): PhaseKey {
   return phaseFilter === "all" ? "late" : phaseFilter;
+}
+
+function compareRows(left: CompRow, right: CompRow, sortKey: SortKey) {
+  if (sortKey === "source") {
+    const leftSource = getSourceDisplayName(left.comp.sources[0]?.name ?? "");
+    const rightSource = getSourceDisplayName(right.comp.sources[0]?.name ?? "");
+    return leftSource.localeCompare(rightSource) || left.title.localeCompare(right.title);
+  }
+
+  if (sortKey === "rank") {
+    const leftRank = getCompRankTags(left.comp)[0]?.tier ?? "Unknown";
+    const rightRank = getCompRankTags(right.comp)[0]?.tier ?? "Unknown";
+    return (
+      (RANK_SORT_ORDER[leftRank] ?? RANK_SORT_ORDER.Unknown) -
+        (RANK_SORT_ORDER[rightRank] ?? RANK_SORT_ORDER.Unknown) ||
+      left.title.localeCompare(right.title)
+    );
+  }
+
+  if (sortKey === "style") {
+    const leftStyle = getPlaystyleLabel(getCompPlaystyle(left.comp)) ?? "--";
+    const rightStyle = getPlaystyleLabel(getCompPlaystyle(right.comp)) ?? "--";
+    return leftStyle.localeCompare(rightStyle) || left.title.localeCompare(right.title);
+  }
+
+  return left.title.localeCompare(right.title);
 }
 
 function AnimatedChampionStrip({
@@ -82,9 +153,9 @@ function AnimatedChampionStrip({
       onMouseLeave={() => setHovered(false)}
     >
       <div ref={trackRef} className="shortlist-icon-track" style={style}>
-        {champions.map((champion) => (
+        {champions.map((champion, index) => (
           <img
-            key={champion.id}
+            key={`${champion.id}-${index}`}
             src={champion.icon}
             alt={champion.name}
             className={`comp-strip-icon cost-${champion.cost}`}
@@ -102,21 +173,31 @@ function AugmentPreviewStrip({
   comp: Comp;
   dataset: Dataset;
 }) {
+  const previewAugments = comp.recommendedAugmentIds
+    .map((augmentId, index) => ({ augmentId, index, augment: dataset.augmentsById[augmentId] }))
+    .filter((entry): entry is { augmentId: string; index: number; augment: Dataset["augmentsById"][string] } =>
+      Boolean(entry.augment)
+    )
+    .sort((left, right) => {
+      const leftOrder = AUGMENT_TIER_ORDER[left.augment.tier] ?? AUGMENT_TIER_ORDER.Unknown;
+      const rightOrder = AUGMENT_TIER_ORDER[right.augment.tier] ?? AUGMENT_TIER_ORDER.Unknown;
+      return leftOrder - rightOrder || left.index - right.index;
+    })
+    .slice(0, 3);
+
   return (
     <div className="row-preview-augs">
-      {comp.recommendedAugmentIds.slice(0, 3).map((augmentId) => {
-        const augment = dataset.augmentsById[augmentId];
-        if (!augment) {
-          return null;
-        }
-
-        return (
-          <div key={augment.id} className={`aug-pill tier-${augment.tier.toLowerCase()}`} title={augment.name}>
-            <img src={augment.icon} alt={augment.name} className="aug-pill-icon" />
-            <span className="aug-pill-rank">{augment.tier}</span>
-          </div>
-        );
-      })}
+      {previewAugments.map(({ augment }) => (
+        <div
+          key={augment.id}
+          data-preview-kind="augment"
+          className={`preview-token tier-${augment.tier.toLowerCase()}`}
+          title={`${augment.name} (${augment.tier})`}
+        >
+          <img src={augment.icon} alt={augment.name} className="preview-token-icon" />
+          <span className="preview-token-badge">{augment.tier}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -127,35 +208,95 @@ function ComponentDemandStrip({ comp }: { comp: Comp }) {
       {comp.componentDemand.slice(0, 4).map((component) => (
         <span
           key={component.componentId}
-          className="demand-pill demand-pill-visual"
+          data-preview-kind="component"
+          className="preview-token"
           title={`${component.count}x ${component.label}`}
         >
           <img
             src={`${import.meta.env.BASE_URL}assets/items/${component.componentId}.png`}
             alt={component.label}
-            className="demand-pill-icon"
+            className="preview-token-icon component-token-icon"
           />
-          <span className="demand-pill-count">{component.count}</span>
+          <span className="preview-token-badge">{component.count}</span>
         </span>
       ))}
     </div>
   );
 }
 
+function SourceCell({ comp }: { comp: Comp }) {
+  const sourceName = comp.sources[0]?.name ?? "source";
+
+  return (
+    <div className="source-cell-label" title={getSourceDisplayName(sourceName)}>
+      <span className="source-code">{getSourceAbbreviation(sourceName)}</span>
+      <span className="source-full">{getSourceDisplayName(sourceName)}</span>
+    </div>
+  );
+}
+
+function RankCell({ comp }: { comp: Comp }) {
+  const rank = getCompRankTags(comp)[0];
+
+  if (!rank) {
+    return <span className="rank-empty">--</span>;
+  }
+
+  return (
+    <span
+      className={`rank-chip rank-${rank.tier.toLowerCase()}`}
+      title={rank.label}
+      aria-label={`Build rank ${rank.label}`}
+    >
+      <img src={getRankIcon(rank.tier)} alt="" className="rank-icon" aria-hidden="true" />
+    </span>
+  );
+}
+
+function StyleCell({ playstyle }: { playstyle: string | null }) {
+  const icon = getPlaystyleIcon(playstyle);
+  const label = getPlaystyleLabel(playstyle);
+  return (
+    <span className={icon ? "style-cell-text with-icon" : "style-cell-text"} title={playstyle ?? undefined}>
+      {icon ? <img src={icon} alt="" className="style-cell-icon" /> : null}
+      {label ?? "--"}
+    </span>
+  );
+}
+
 export function CompListPane({ comps, dataset, phaseFilter, onQuickFilter }: CompListPaneProps) {
+  const rows = useMemo(() => buildCompRows(comps), [comps]);
   const [expandedCompIds, setExpandedCompIds] = useState<string[]>([]);
   const [selectedTabs, setSelectedTabs] = useState<Record<string, DetailTab>>({});
   const [activePhases, setActivePhases] = useState<Record<string, PhaseKey>>({});
   const [liveInspectors, setLiveInspectors] = useState<Record<string, InspectorTarget>>({});
   const [lockedInspectors, setLockedInspectors] = useState<Record<string, InspectorTarget>>({});
+  const [sortKey, setSortKey] = useState<SortKey>("rank");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
   useEffect(() => {
-    const visibleIds = new Set(comps.map((comp) => comp.id));
+    const visibleIds = new Set(rows.map((row) => row.key));
 
     setExpandedCompIds((current) => current.filter((id) => visibleIds.has(id)));
-  }, [comps]);
+  }, [rows]);
 
   const previewPhase = getPreviewPhase(phaseFilter);
+  const sortedRows = useMemo(() => {
+    const nextRows = [...rows].sort((left, right) => compareRows(left, right, sortKey));
+    return sortDirection === "desc" ? nextRows.reverse() : nextRows;
+  }, [rows, sortDirection, sortKey]);
+
+  const changeSort = (nextSortKey: SortKey) => {
+    setSortKey((currentSortKey) => {
+      if (currentSortKey === nextSortKey) {
+        setSortDirection((currentDirection) => (currentDirection === "asc" ? "desc" : "asc"));
+        return currentSortKey;
+      }
+
+      setSortDirection("asc");
+      return nextSortKey;
+    });
+  };
 
   const ensureRowState = (compId: string) => {
     setSelectedTabs((current) =>
@@ -181,69 +322,121 @@ export function CompListPane({ comps, dataset, phaseFilter, onQuickFilter }: Com
   return (
     <section className="comp-list-shell">
       <div className="list-columns">
-        <div>Composition</div>
+        <button
+          type="button"
+          className={sortKey === "source" ? "column-sort-button active" : "column-sort-button"}
+          aria-label="Sort by source"
+          aria-sort={sortKey === "source" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
+          onClick={() => changeSort("source")}
+        >
+          Source
+        </button>
+        <button
+          type="button"
+          className={sortKey === "rank" ? "column-sort-button active" : "column-sort-button"}
+          aria-label="Sort by rank"
+          aria-sort={sortKey === "rank" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
+          onClick={() => changeSort("rank")}
+        >
+          Rank
+        </button>
+        <button
+          type="button"
+          className={sortKey === "style" ? "column-sort-button active" : "column-sort-button"}
+          aria-label="Sort by style"
+          aria-sort={sortKey === "style" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
+          onClick={() => changeSort("style")}
+        >
+          Style
+        </button>
+        <button
+          type="button"
+          className={sortKey === "name" ? "column-sort-button active" : "column-sort-button"}
+          aria-label="Sort by comp name"
+          aria-sort={sortKey === "name" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
+          onClick={() => changeSort("name")}
+        >
+          Composition
+        </button>
         <div>Champions</div>
         <div>Augments</div>
         <div>Components</div>
       </div>
 
       <div className="comp-list-body">
-        {comps.length === 0 ? (
+        {sortedRows.length === 0 ? (
           <div className="empty-results">
             <p>No compositions match the current search.</p>
           </div>
         ) : null}
 
-        {comps.map((comp) => {
-          const previewChampions = comp.phases[previewPhase].championIds
+        {sortedRows.map((row) => {
+          const comp = row.comp;
+          const previewChampionIds = comp.phases[previewPhase].boardSlots
+            .map((slot) => slot.championId)
+            .filter((championId): championId is string => Boolean(championId));
+          const previewChampions = (previewChampionIds.length ? previewChampionIds : comp.phases[previewPhase].championIds)
             .map((championId) => dataset.championsById[championId])
             .filter(Boolean);
-          const rankTags = getCompRankTags(comp);
           const playstyle = getCompPlaystyle(comp);
-          const isExpanded = expandedCompIds.includes(comp.id);
-          const selectedTab = selectedTabs[comp.id] ?? getDefaultDetailTab(phaseFilter);
-          const activePhase = activePhases[comp.id] ?? getDefaultBoardPhase(phaseFilter);
-          const liveInspector = liveInspectors[comp.id] ?? null;
-          const lockedInspector = lockedInspectors[comp.id] ?? null;
+          const isExpanded = expandedCompIds.includes(row.key);
+          const selectedTab = selectedTabs[row.key] ?? getDefaultDetailTab(phaseFilter);
+          const activePhase = activePhases[row.key] ?? getDefaultBoardPhase(phaseFilter);
+          const liveInspector = liveInspectors[row.key] ?? null;
+          const lockedInspector = lockedInspectors[row.key] ?? null;
 
           return (
-            <article key={comp.id} className={isExpanded ? "comp-row expanded" : "comp-row"}>
-              <button
-                type="button"
+            <article
+              key={row.key}
+              className={isExpanded ? "comp-row expanded" : "comp-row"}
+              data-comp-id={comp.id}
+            >
+              <div
+                role="button"
+                tabIndex={0}
                 className="row-header-trigger"
                 aria-expanded={isExpanded}
-                aria-label={`Toggle comp ${comp.title}`}
-                onClick={() => toggleExpanded(comp.id)}
+                aria-label={`Toggle comp ${row.title}`}
+                onClick={() => toggleExpanded(row.key)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    toggleExpanded(row.key);
+                  }
+                }}
               >
-                <div className="row-name">
-                  <h2>{comp.title}</h2>
-                  <div className="row-meta-line" aria-label={`${comp.title} ranks and strategy`}>
-                    {rankTags.slice(0, 4).map((rank) => (
-                      <span
-                        key={rank.key}
-                        className={`rank-chip rank-${rank.tier.toLowerCase()}`}
-                        title={rank.label}
-                        aria-label={`Build rank ${rank.label}`}
-                      >
-                        <span className="rank-emblem" aria-hidden="true">
-                          {rank.tier}
-                        </span>
-                        <span className="rank-source">{rank.sourceShort}</span>
-                      </span>
-                    ))}
-                    {playstyle ? <span className="style-chip">{playstyle}</span> : null}
-                  </div>
+                <div className="source-cell" data-testid="source-cell">
+                  <SourceCell comp={comp} />
                 </div>
 
-                <AnimatedChampionStrip
-                  champions={previewChampions}
-                  label={`${comp.title} ${previewPhase} champions`}
-                  animate={isExpanded}
-                />
+                <div className="rank-cell" data-testid="rank-cell">
+                  <RankCell comp={comp} />
+                </div>
 
-                <AugmentPreviewStrip comp={comp} dataset={dataset} />
-                <ComponentDemandStrip comp={comp} />
-              </button>
+                <div className="style-cell" data-testid="style-cell">
+                  <StyleCell playstyle={playstyle} />
+                </div>
+
+                <div className="row-name" data-testid="composition-cell">
+                  <h2>{row.title}</h2>
+                </div>
+
+                <div className="champions-cell">
+                  <AnimatedChampionStrip
+                    champions={previewChampions}
+                    label={`${row.title} ${previewPhase} champions`}
+                    animate={isExpanded}
+                  />
+                </div>
+
+                <div className="augments-cell">
+                  <AugmentPreviewStrip comp={comp} dataset={dataset} />
+                </div>
+
+                <div className="components-cell">
+                  <ComponentDemandStrip comp={comp} />
+                </div>
+              </div>
 
               {isExpanded ? (
                 <div className="row-detail-shell">
@@ -253,55 +446,55 @@ export function CompListPane({ comps, dataset, phaseFilter, onQuickFilter }: Com
                     activePhase={activePhase}
                     selectedTab={selectedTab}
                     onActivePhaseChange={(value) => {
-                      setActivePhases((current) => ({ ...current, [comp.id]: value }));
+                      setActivePhases((current) => ({ ...current, [row.key]: value }));
                     }}
                     onSelectTab={(value) => {
-                      setSelectedTabs((current) => ({ ...current, [comp.id]: value }));
+                      setSelectedTabs((current) => ({ ...current, [row.key]: value }));
                       if (value !== "overview") {
-                        setActivePhases((current) => ({ ...current, [comp.id]: value }));
+                        setActivePhases((current) => ({ ...current, [row.key]: value }));
                       }
                     }}
                     inspector={liveInspector}
                     lockedInspector={lockedInspector}
                     onHoverChampion={(id) => {
-                      if (lockedInspectors[comp.id]) {
+                      if (lockedInspectors[row.key]) {
                         return;
                       }
                       setLiveInspectors((current) => ({
                         ...current,
-                        [comp.id]: id ? { kind: "champion", id } : null
+                        [row.key]: id ? { kind: "champion", id } : null
                       }));
                     }}
                     onHoverAugment={(id) => {
-                      if (lockedInspectors[comp.id]) {
+                      if (lockedInspectors[row.key]) {
                         return;
                       }
                       setLiveInspectors((current) => ({
                         ...current,
-                        [comp.id]: id ? { kind: "augment", id } : null
+                        [row.key]: id ? { kind: "augment", id } : null
                       }));
                     }}
                     onHoverSynergy={(id) => {
-                      if (lockedInspectors[comp.id]) {
+                      if (lockedInspectors[row.key]) {
                         return;
                       }
                       setLiveInspectors((current) => ({
                         ...current,
-                        [comp.id]: id ? { kind: "synergy", id } : null
+                        [row.key]: id ? { kind: "synergy", id } : null
                       }));
                     }}
                     onHoverItem={(id) => {
-                      if (lockedInspectors[comp.id]) {
+                      if (lockedInspectors[row.key]) {
                         return;
                       }
                       setLiveInspectors((current) => ({
                         ...current,
-                        [comp.id]: id ? { kind: "item", id } : null
+                        [row.key]: id ? { kind: "item", id } : null
                       }));
                     }}
                     onToggleLock={(target) => {
                       setLockedInspectors((current) => {
-                        const existing = current[comp.id];
+                        const existing = current[row.key];
                         const isSame =
                           existing &&
                           target &&
@@ -310,7 +503,7 @@ export function CompListPane({ comps, dataset, phaseFilter, onQuickFilter }: Com
 
                         return {
                           ...current,
-                          [comp.id]: isSame ? null : target
+                          [row.key]: isSame ? null : target
                         };
                       });
                     }}

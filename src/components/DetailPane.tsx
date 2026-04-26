@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Augment, Champion, Comp, Dataset, Synergy } from "../../shared/tft";
 import type { PhaseKey } from "../../shared/normalization";
-import { getCompPlaystyle, getCompRankTags } from "../lib/compMeta";
+import { getCompPlaystyle, getCompRankTags, getPlaystyleIcon, getPlaystyleLabel, getRankIcon } from "../lib/compMeta";
 import { getItemDisplay } from "../lib/items";
 
 export type InspectorTarget =
@@ -211,7 +211,7 @@ function renderChampionTile(
               <button
                 key={`${itemId}-${index}`}
                 type="button"
-                className="board-item-icon"
+                className={`board-item-icon item-slot-${index + 1}`}
                 title={`${item.name} - click to pin, right-click to filter`}
                 aria-label={`Inspect item ${item.name}`}
                 onMouseEnter={() => onHoverItem(itemId)}
@@ -276,19 +276,28 @@ function renderAugment(
 }
 
 function parseLevellingGuideLine(line: string) {
-  const match = line.match(
-    /^Level\s+(?<level>\d+)\s+at\s+(?<stage>\d-\d)\s+with\s+(?<gold>\d+\+\s+gold)(?:\s+—\s+(?<note>.+))?$/i
-  );
+  const match = line.match(/\blevel\s+(?<level>\d+)\b/i);
 
   if (!match?.groups) {
     return null;
   }
 
+  const stage = line.match(/\b(?:at|through)\s+(?<stage>\d-\d)\b/i)?.groups?.stage ?? "";
+  const gold = line.match(/\b(?<gold>\d+\+\s+gold)\b/i)?.groups?.gold ?? "";
+  const note = line
+    .replace(/^.*?\blevel\s+\d+\b/i, "")
+    .replace(/\b(?:at|through)\s+\d-\d\b/i, "")
+    .replace(/\bwith\s+\d+\+\s+gold\b/i, "")
+    .replace(/\b\d+\+\s+gold\b/i, "")
+    .replace(/^[\s—-]+/, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
   return {
     level: match.groups.level,
-    stage: match.groups.stage,
-    gold: match.groups.gold,
-    note: match.groups.note?.trim() ?? null
+    stage,
+    gold,
+    note: note || null
   };
 }
 
@@ -345,6 +354,8 @@ function renderGuideSection(section: Comp["guide"]["overview"][number], selected
   if (section.title === "How to play") {
     const styleLine = section.lines.find((line) => line.startsWith("Style: "));
     const styleValue = styleLine?.replace(/^Style:\s*/i, "").trim();
+    const styleIcon = getPlaystyleIcon(styleValue ?? null);
+    const styleLabel = getPlaystyleLabel(styleValue ?? null);
     const bodyLines = section.lines.filter((line) => line !== styleLine);
 
     return (
@@ -353,7 +364,12 @@ function renderGuideSection(section: Comp["guide"]["overview"][number], selected
           <h3>{section.title}</h3>
         </div>
         <div className="guide-card-body compact-guide-body">
-          {styleValue ? <span className="guide-tag guide-tag-strong">{styleValue}</span> : null}
+          {styleLabel ? (
+            <span className="guide-tag guide-tag-strong" title={styleValue}>
+              {styleIcon ? <img src={styleIcon} alt="" className="style-cell-icon" /> : null}
+              {styleLabel}
+            </span>
+          ) : null}
           {bodyLines.map((line) => (
             <p key={`${section.title}-${line}`} className="guide-summary">
               {line}
@@ -368,9 +384,11 @@ function renderGuideSection(section: Comp["guide"]["overview"][number], selected
     return renderDefaultGuideSection(section, selectedTab);
   }
 
-  const entries = section.lines
-    .map(parseLevellingGuideLine)
+  const parsedLines = section.lines.map((line) => ({ line, entry: parseLevellingGuideLine(line) }));
+  const entries = parsedLines
+    .map(({ entry }) => entry)
     .filter((entry): entry is LevellingGuideEntry => Boolean(entry));
+  const extraLines = parsedLines.filter(({ entry }) => !entry).map(({ line }) => line);
 
   if (!entries.length) {
     return renderDefaultGuideSection(section, selectedTab);
@@ -381,22 +399,28 @@ function renderGuideSection(section: Comp["guide"]["overview"][number], selected
       <div className="guide-card-header">
         <h3>{section.title}</h3>
       </div>
-      <div className="level-guide-list">
+      <div className="level-guide-timeline">
         {entries.map((entry) => (
           <div key={`${section.title}-${entry.level}-${entry.stage}`} className="level-guide-step">
-            <div className="level-guide-step-head">
-              <div className="level-guide-level">L{entry.level}</div>
-              {entry.note ? <p className="level-guide-note">{entry.note}</p> : null}
-            </div>
+            <div className="level-guide-node" aria-hidden="true" />
+            <div className="level-guide-level">L{entry.level}</div>
             <div className="level-guide-detail">
               <div className="level-guide-meta">
-                <span className="level-guide-pill">{entry.stage}</span>
-                <span className="level-guide-pill muted">{entry.gold}</span>
+                {entry.stage ? <span className="level-guide-pill">{entry.stage}</span> : null}
+                {entry.gold ? <span className="level-guide-pill muted">{entry.gold}</span> : null}
               </div>
+              {entry.note ? <p className="level-guide-note">{entry.note}</p> : null}
             </div>
           </div>
         ))}
       </div>
+      {extraLines.length ? (
+        <div className="level-guide-extra">
+          {extraLines.map((line) => (
+            <p key={`${section.title}-${line}`}>{line}</p>
+          ))}
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -422,6 +446,9 @@ export function DetailPane({
   const activeInspector = buildInspectorModel(comp, dataset, activePhase, lockedInspector ?? inspector);
   const rankTags = getCompRankTags(comp);
   const playstyle = getCompPlaystyle(comp);
+  const playstyleIcon = getPlaystyleIcon(playstyle);
+  const playstyleLabel = getPlaystyleLabel(playstyle);
+  const filledBoardSlotCount = phase.boardSlots.filter((slot) => slot.championId).length;
   const boardCells = phase.boardSlots.map((slot, slotIndex) => {
     const row = Math.floor(slotIndex / 7);
     const column = slotIndex % 7;
@@ -437,12 +464,8 @@ export function DetailPane({
       } satisfies React.CSSProperties
     };
   });
-  const synergyCounts = phase.boardSlots.reduce<Record<string, number>>((counts, slot) => {
-    if (!slot.championId) {
-      return counts;
-    }
-
-    const champion = dataset.championsById[slot.championId];
+  const synergyCounts = phase.championIds.reduce<Record<string, number>>((counts, championId) => {
+    const champion = dataset.championsById[championId];
     for (const traitId of champion?.traitIds ?? []) {
       counts[traitId] = (counts[traitId] ?? 0) + 1;
     }
@@ -474,7 +497,12 @@ export function DetailPane({
             ))}
           </div>
           <div className="expanded-build-meta">
-            {playstyle ? <span className="style-chip large">{playstyle}</span> : null}
+            {playstyleLabel ? (
+              <span className="style-chip large" title={playstyle ?? undefined}>
+                {playstyleIcon ? <img src={playstyleIcon} alt="" className="style-chip-icon" /> : null}
+                {playstyleLabel}
+              </span>
+            ) : null}
             {rankTags.slice(0, 4).map((rank) => (
               <span
                 key={rank.key}
@@ -482,9 +510,7 @@ export function DetailPane({
                 title={rank.label}
                 aria-label={`Build rank ${rank.label}`}
               >
-                <span className="rank-emblem" aria-hidden="true">
-                  {rank.tier}
-                </span>
+                <img src={getRankIcon(rank.tier)} alt="" className="rank-icon" aria-hidden="true" />
                 <span className="rank-source">{rank.sourceShort}</span>
               </span>
             ))}
@@ -521,14 +547,14 @@ export function DetailPane({
           <div className="section-header">
             <h3>Board view</h3>
             <p>
-              {activePhase} board · {phase.championIds.length} units
+              {activePhase} board · {filledBoardSlotCount} units
             </p>
           </div>
           <div className="board-stage">
             <div className="board-grid">
               {boardCells.map(({ slot, style }) => {
                 const champion = slot.championId ? dataset.championsById[slot.championId] : undefined;
-                const starLevel = champion ? phase.championLevels?.[champion.id] ?? 1 : 1;
+                const starLevel = champion ? slot.starLevel ?? phase.championLevels?.[champion.id] ?? 1 : 1;
                 return (
                   <div key={slot.index} className="board-cell" style={style}>
                     {renderChampionTile(
@@ -568,7 +594,55 @@ export function DetailPane({
         </div>
       </div>
 
-      <div className="inspector-card detail-full-inspector">
+      <div className="detail-support-grid">
+        <div className="detail-card detail-card-inline">
+          <div className="section-header">
+            <h3>Synergies</h3>
+            <p>Hover for info - click to pin - right-click to filter</p>
+          </div>
+          <div className="token-grid icon-grid support-token-grid">
+            {phase.synergyIds.map((synergyId) => {
+              const synergy = dataset.synergiesById[synergyId];
+              const displayName = synergy?.name ?? synergyId;
+              return (
+                <button
+                  key={synergyId}
+                  type="button"
+                  className="token-button synergy-card"
+                  title={`${displayName} - click to pin, right-click to filter`}
+                  aria-label={`Inspect synergy ${displayName}`}
+                  onMouseEnter={() => onHoverSynergy(synergyId)}
+                  onMouseLeave={() => onHoverSynergy(null)}
+                  onClick={() => onToggleLock({ kind: "synergy", id: synergyId })}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onQuickFilter(displayName);
+                  }}
+                >
+                  <img src={synergy?.icon} alt={displayName} className="token-icon" />
+                  <span className="synergy-name">{displayName}</span>
+                  <span className="synergy-count">{synergyCounts[synergyId] ?? 0}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="detail-card detail-card-inline">
+          <div className="section-header">
+            <h3>Recommended augments</h3>
+            <p>Hover for info - click to pin - right-click to filter</p>
+          </div>
+          <div className="augment-grid icon-grid support-augment-grid">
+            {comp.recommendedAugmentIds.map((augmentId) =>
+              renderAugment(dataset.augmentsById[augmentId], onHoverAugment, onToggleLock, onQuickFilter)
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className={activeInspector ? "inspector-card detail-full-inspector has-inspector" : "inspector-card detail-full-inspector is-empty"}>
         <div className="section-header">
           <h3>Inspector</h3>
           <p>{lockedInspector ? "Pinned" : "Live hover preview"}</p>
@@ -639,54 +713,6 @@ export function DetailPane({
             Hover a unit or augment to preview it here. Click one to keep it pinned while you compare phases.
           </p>
         )}
-      </div>
-
-      <div className="detail-support-grid">
-        <div className="detail-card detail-card-inline">
-          <div className="section-header">
-            <h3>Synergies</h3>
-            <p>Hover for info - click to pin - right-click to filter</p>
-          </div>
-          <div className="token-grid icon-grid support-token-grid">
-            {phase.synergyIds.map((synergyId) => {
-              const synergy = dataset.synergiesById[synergyId];
-              const displayName = synergy?.name ?? synergyId;
-              return (
-                <button
-                  key={synergyId}
-                  type="button"
-                  className="token-button synergy-card"
-                  title={`${displayName} - click to pin, right-click to filter`}
-                  aria-label={`Inspect synergy ${displayName}`}
-                  onMouseEnter={() => onHoverSynergy(synergyId)}
-                  onMouseLeave={() => onHoverSynergy(null)}
-                  onClick={() => onToggleLock({ kind: "synergy", id: synergyId })}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onQuickFilter(displayName);
-                  }}
-                >
-                  <img src={synergy?.icon} alt={displayName} className="token-icon" />
-                  <span className="synergy-name">{displayName}</span>
-                  <span className="synergy-count">{synergyCounts[synergyId] ?? 0}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="detail-card detail-card-inline">
-          <div className="section-header">
-            <h3>Recommended augments</h3>
-            <p>Hover for info - click to pin - right-click to filter</p>
-          </div>
-          <div className="augment-grid icon-grid support-augment-grid">
-            {comp.recommendedAugmentIds.map((augmentId) =>
-              renderAugment(dataset.augmentsById[augmentId], onHoverAugment, onToggleLock, onQuickFilter)
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,6 +53,7 @@ type SourceComp = {
   augmentTypes?: string[];
   tips?: Array<{ stage: string; tip: string }>;
   augmentsTip?: string;
+  levelingLines?: string[];
   mainChampionId?: string;
   mainItemId?: string;
   teamCode?: string;
@@ -76,27 +78,35 @@ function sourceDisplayName(source: SourceName) {
 
 function sourceTierOrder(tier?: string) {
   const normalized = tier?.trim().toUpperCase() ?? "";
-  if (normalized.startsWith("S") || normalized === "OP") {
+  if (normalized.startsWith("X")) {
     return 0;
   }
-  if (normalized.startsWith("A")) {
+  if (normalized.startsWith("S") || normalized === "OP") {
     return 1;
   }
-  if (normalized.startsWith("B")) {
+  if (normalized.startsWith("A")) {
     return 2;
   }
-  if (normalized.startsWith("C")) {
+  if (normalized.startsWith("B")) {
     return 3;
   }
-  if (normalized.startsWith("D")) {
+  if (normalized.startsWith("C")) {
     return 4;
   }
-  return 5;
+  if (normalized.startsWith("D")) {
+    return 5;
+  }
+  return 6;
 }
 
 function sourceOrder(source: SourceName) {
   const index = (["mobalytics", "tftacademy", "tftactics", "tftflow", "metatft"] as SourceName[]).indexOf(source);
   return index === -1 ? 99 : index;
+}
+
+function normalizeCompTier(value: string | null | undefined) {
+  const match = cleanText(value).match(/\b(X|S|A|B|C|D)\b/i);
+  return match ? match[1].toUpperCase() : "";
 }
 
 type CDragonChampion = {
@@ -155,12 +165,22 @@ type CDragonTftData = {
   >;
 };
 
+type TeamPlannerChampion = {
+  character_id?: string;
+  display_name?: string;
+  team_planner_code?: number;
+};
+
+type TeamPlannerData = Record<string, TeamPlannerChampion[]>;
+
 type Catalogs = {
   championsById: Dataset["championsById"];
   synergiesById: Dataset["synergiesById"];
   augmentsById: Dataset["augmentsById"];
   itemsById: Dataset["itemsById"];
   championRoles: Record<string, string>;
+  teamPlannerCodeByChampionId: Record<string, number>;
+  synergyNameByApiName: Record<string, string>;
   itemIdByApiName: Record<string, string>;
   itemNameById: Record<string, string>;
   itemRecipeById: Record<string, [string, string]>;
@@ -192,12 +212,17 @@ const PUBLIC_ASSETS_DIR = path.join(PUBLIC_DIR, "assets");
 const PUBLIC_DATA_DIR = path.join(ROOT_DIR, "src", "data");
 const RAW_DIR = path.join(ROOT_DIR, "data", "raw");
 const CDRAGON_TFT_URL = "https://raw.communitydragon.org/latest/cdragon/tft/en_us.json";
+const CDRAGON_TEAM_PLANNER_URL =
+  "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/tftchampions-teamplanner.json";
 const CDRAGON_GAME_BASE_URL = "https://raw.communitydragon.org/latest/game/";
 const MOBALYTICS_COMPS_URL = `https://mobalytics.gg/tft/set${CURRENT_SET}/team-comps`;
 const TFTACADEMY_COMPS_URL = "https://tftacademy.com/tierlist/comps";
 const TFTACTICS_COMPS_URL = "https://tftactics.gg/tierlist/team-comps";
 const TFTFLOW_COMPS_URL = "https://tftflow.com/";
 const METATFT_CLUSTER_URL = "https://api-hc.metatft.com/tft-comps-api/latest_cluster_info";
+const METATFT_BUILD_URL = "https://api-hc.metatft.com/tft-comps-api/comp_builds";
+const METATFT_AUGMENT_URL = "https://api-hc.metatft.com/tft-comps-api/comp_augments";
+const METATFT_OPTIONS_URL = "https://api-hc.metatft.com/tft-comps-api/comp_options";
 const REQUEST_HEADERS = {
   "user-agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"
@@ -213,6 +238,24 @@ const COMPONENT_API_TO_ID: Record<string, string> = {
   TFT_Item_GiantsBelt: "giants-belt",
   TFT_Item_SparringGloves: "sparring-gloves"
 };
+
+const MOBALYTICS_COMPONENT_SLUG_TO_ID: Record<string, string> = {
+  "bf-sword": "bf-sword",
+  "b-f-sword": "bf-sword",
+  "recurve-bow": "recurve-bow",
+  "needlessly-large-rod": "needlessly-large-rod",
+  "tear-of-the-goddess": "tear-of-the-goddess",
+  "chain-vest": "chain-vest",
+  "negatron-cloak": "negatron-cloak",
+  "giants-belt": "giants-belt",
+  "giant-s-belt": "giants-belt",
+  "sparring-gloves": "sparring-gloves",
+  spatula: "spatula",
+  frying_pan: "frying-pan",
+  "frying-pan": "frying-pan"
+};
+
+const IGNORED_ITEM_IDS = new Set(["tft-flex"]);
 
 const BASE_COMPONENT_IDS = new Set(Object.values(COMPONENT_API_TO_ID));
 
@@ -271,11 +314,17 @@ function extractTraitBreakpoints(trait: CDragonTrait): { units: number; effect: 
 function titleFromApiName(apiName: string) {
   return titleCaseFromSlug(
     apiName
+      .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
       .replace(/^TFT\d*_?/i, "")
       .replace(/^TFTSet\d*_?/i, "")
       .replace(/^Item_?/i, "")
       .replace(/^Augment_?/i, "")
+      .replace(/_/g, "-")
   );
+}
+
+function itemIdFromApiNameFallback(apiName: string) {
+  return normalizeId(titleFromApiName(apiName)) || normalizeId(apiName);
 }
 
 function idFromApiName(apiName: string | null | undefined) {
@@ -439,6 +488,42 @@ function parseHtmlDocument(html: string) {
   return new JSDOM(html, { virtualConsole }).window.document;
 }
 
+export function parseTftAcademyTierMap(html: string) {
+  const document = parseHtmlDocument(html);
+  const tiersBySlug: Record<string, string> = {};
+
+  for (const link of document.querySelectorAll<HTMLAnchorElement>('a[href*="/tierlist/comps/"]')) {
+    const href = link.getAttribute("href") ?? "";
+    const slug = href.split(/[?#]/)[0].split("/").filter(Boolean).pop();
+    if (!slug) {
+      continue;
+    }
+
+    const imageAlt = [...link.querySelectorAll("img")]
+      .map((image) => cleanText(image.getAttribute("alt")))
+      .find((alt) => /\b[XSABCD]\s*Tier\b/i.test(alt));
+    const match = imageAlt?.match(/\b(X|S|A|B|C|D)\s*Tier\b/i);
+    if (match) {
+      tiersBySlug[slug] = match[1].toUpperCase();
+    }
+  }
+
+  return tiersBySlug;
+}
+
+export function parseTftAcademyDetailTier(html: string) {
+  const document = parseHtmlDocument(html);
+  for (const image of document.querySelectorAll("img")) {
+    const alt = cleanText(image.getAttribute("alt"));
+    const match = alt.match(/\b(X|S|A|B|C|D)\s*Tier\b/i);
+    if (match) {
+      return match[1].toUpperCase();
+    }
+  }
+
+  return "";
+}
+
 function derefApollo(cache: Record<string, any>, value: any, seen = new Set<string>()): any {
   if (Array.isArray(value)) {
     return value.map((entry) => derefApollo(cache, entry, seen));
@@ -464,18 +549,31 @@ function derefApollo(cache: Record<string, any>, value: any, seen = new Set<stri
 function buildSourceUnitFromChampionId(
   championId: string,
   itemIds: string[] = [],
-  boardIndex?: number
+  boardIndex?: number,
+  starLevel?: number
 ): SourceUnit | null {
   if (!championId) {
     return null;
   }
-  return { championId, itemIds, boardIndex };
+  return { championId, itemIds, boardIndex, starLevel };
 }
 
-function buildCatalogs(cdragon: CDragonTftData, mobalytics: MobalyticsLookups): Catalogs {
+function buildCatalogs(cdragon: CDragonTftData, mobalytics: MobalyticsLookups, teamPlanner: TeamPlannerData): Catalogs {
   const assetDownloads: AssetDownload[] = [];
   const setData =
     cdragon.setData?.find((set) => set.number === CURRENT_SET || set.mutator === `TFTSet${CURRENT_SET}`) ?? {};
+  const teamPlannerCodeByChampionId: Record<string, number> = {};
+  for (const champion of teamPlanner[`TFTSet${CURRENT_SET}`] ?? []) {
+    const code = Number(champion.team_planner_code);
+    if (!Number.isFinite(code) || code < 1) {
+      continue;
+    }
+
+    const championId = idFromApiName(champion.character_id) || championIdFromName(champion.display_name);
+    if (championId) {
+      teamPlannerCodeByChampionId[championId] = code;
+    }
+  }
 
   const setItemApiNames = new Set([...(setData.items ?? []), ...(setData.augments ?? [])]);
   const allItems = cdragon.items ?? [];
@@ -500,12 +598,12 @@ function buildCatalogs(cdragon: CDragonTftData, mobalytics: MobalyticsLookups): 
   }
 
   for (const item of allItems) {
-    if (!item.apiName || !item.name) {
+    if (!item.apiName) {
       continue;
     }
-    const itemId = normalizeId(item.name);
+    const itemId = item.name ? normalizeId(item.name) : itemIdFromApiNameFallback(item.apiName);
     itemIdByApiName[item.apiName] = itemId;
-    itemNameById[itemId] = item.name;
+    itemNameById[itemId] = cleanText(item.name) || titleFromApiName(item.apiName);
   }
 
   for (const item of allItems) {
@@ -555,9 +653,13 @@ function buildCatalogs(cdragon: CDragonTftData, mobalytics: MobalyticsLookups): 
   }
 
   const synergiesById: Dataset["synergiesById"] = {};
+  const synergyNameByApiName: Record<string, string> = {};
   for (const trait of cdragon.sets?.[String(CURRENT_SET)]?.traits ?? []) {
     if (!trait.name) {
       continue;
+    }
+    if (trait.apiName) {
+      synergyNameByApiName[trait.apiName] = trait.name;
     }
     const id = normalizeId(trait.name);
     if (!id || synergiesById[id]) {
@@ -576,22 +678,28 @@ function buildCatalogs(cdragon: CDragonTftData, mobalytics: MobalyticsLookups): 
   const augmentApiNamesSet = new Set(setData.augments ?? []);
   const componentApiNamesSet = new Set(Object.keys(COMPONENT_API_TO_ID));
   for (const item of allItems) {
-    if (!item.apiName || !item.name || !item.icon) {
+    if (!item.apiName || !item.icon) {
       continue;
     }
     if (augmentApiNamesSet.has(item.apiName)) {
       continue;
     }
-    if (!item.apiName.startsWith("TFT_Item_") && !componentApiNamesSet.has(item.apiName)) {
+    const itemName = cleanText(item.name) || titleFromApiName(item.apiName);
+    const isRuntimeItem =
+      setItemApiNames.has(item.apiName) ||
+      /^TFT(?:\d+)?_(?:Item|Consumable|GravesTrait|Favored)/i.test(item.apiName) ||
+      componentApiNamesSet.has(item.apiName) ||
+      item.icon.includes("/Item_Icons/");
+    if (!isRuntimeItem) {
       continue;
     }
-    const id = itemIdByApiName[item.apiName] ?? normalizeId(item.name);
+    const id = itemIdByApiName[item.apiName] ?? normalizeId(itemName);
     if (!id || itemsById[id]) {
       continue;
     }
     itemsById[id] = {
       id,
-      name: item.name,
+      name: itemName,
       description: cleanGameText(item.desc),
       icon: queueAsset(assetDownloads, cdragonAssetUrl(item.icon), "items", id)
     };
@@ -643,6 +751,8 @@ function buildCatalogs(cdragon: CDragonTftData, mobalytics: MobalyticsLookups): 
     augmentsById,
     itemsById,
     championRoles,
+    teamPlannerCodeByChampionId,
+    synergyNameByApiName,
     itemIdByApiName,
     itemNameById,
     itemRecipeById,
@@ -656,7 +766,39 @@ function itemIdFromSource(value: string | null | undefined, catalogs: Pick<Catal
   if (!value) {
     return "";
   }
-  return catalogs.itemIdByApiName[value] ?? normalizeId(value);
+  const cleaned = value
+    .replace(/\?.*$/, "")
+    .replace(/\.(?:tft_set\d+|tft_tft\d+(?:_\d+)?|tft\d+_\d+)\.png$/i, "")
+    .replace(/\.(?:png|webp|jpg|jpeg)$/i, "")
+    .replace(/\.(?:tft_set\d+|tft_tft\d+(?:_\d+)?|tft\d+_\d+)$/i, "");
+  const normalized = normalizeId(cleaned);
+  if (IGNORED_ITEM_IDS.has(normalized)) {
+    return "";
+  }
+
+  const direct = catalogs.itemIdByApiName[value] ?? catalogs.itemIdByApiName[cleaned];
+  if (direct) {
+    return direct;
+  }
+
+  const sourceCompact = normalized.replace(/^tft-?\d*-item-/, "").replace(/-/g, "");
+  const apiMatch = Object.entries(catalogs.itemIdByApiName).find(([apiName]) => {
+    const apiCompact = normalizeId(apiName)
+      .replace(/^tft-?\d*-item-/, "")
+      .replace(/-/g, "");
+    return apiCompact === sourceCompact;
+  });
+  if (apiMatch) {
+    return apiMatch[1];
+  }
+
+  const emblemMatch = cleaned.match(/^TFT\d+_Emblem_(?<trait>.+)$/i);
+  if (emblemMatch?.groups?.trait) {
+    const traitSlug = normalizeId(emblemMatch.groups.trait.replace(/([a-z0-9])([A-Z])/g, "$1-$2"));
+    return `${traitSlug}-emblem`;
+  }
+
+  return normalized;
 }
 
 function sourceAugmentId(augment: SourceAugment, catalogs: Pick<Catalogs, "augmentIdByApiName" | "augmentIdByLookup">) {
@@ -672,18 +814,53 @@ function sourceAugmentId(augment: SourceAugment, catalogs: Pick<Catalogs, "augme
   return augmentIdFromName(augment.name ?? augment.slug ?? augment.apiName ?? "");
 }
 
+function mobalyticsCanonicalItemId(slug: string | null | undefined, name: string | null | undefined) {
+  const normalizedSlug = normalizeId(slug ?? "");
+  if (MOBALYTICS_COMPONENT_SLUG_TO_ID[normalizedSlug]) {
+    return MOBALYTICS_COMPONENT_SLUG_TO_ID[normalizedSlug];
+  }
+
+  return normalizeId(name) || normalizedSlug;
+}
+
+function buildMobalyticsItemIdBySlug(stat: Record<string, any>) {
+  const itemIdBySlug: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(stat)) {
+    if (!key.startsWith("GameItemsV1DataFlatDto")) {
+      continue;
+    }
+
+    const item = raw as any;
+    if (item.gameSet !== `set${CURRENT_SET}`) {
+      continue;
+    }
+
+    const slug = normalizeId(item.slug);
+    const itemId = mobalyticsCanonicalItemId(item.slug, item.name);
+    if (slug && itemId) {
+      itemIdBySlug[slug] = itemId;
+    }
+  }
+  return itemIdBySlug;
+}
+
 function normalizeSourceUnits(
-  units: Array<{ apiName?: string; boardIndex?: number; items?: string[]; name?: string }> | undefined,
+  units: Array<{ apiName?: string; boardIndex?: number; items?: string[]; name?: string; stars?: number; starLevel?: number }> | undefined,
   catalogs: Pick<Catalogs, "itemIdByApiName">
 ) {
   return (units ?? [])
-    .map((unit) =>
-      buildSourceUnitFromChampionId(
+    .map((unit) => {
+      const rawStarLevel = Number(unit.stars ?? unit.starLevel);
+      const starLevel =
+        Number.isFinite(rawStarLevel) && rawStarLevel >= 1 && rawStarLevel <= 3 ? Math.round(rawStarLevel) : undefined;
+
+      return buildSourceUnitFromChampionId(
         unit.apiName ? idFromApiName(unit.apiName) : championIdFromName(unit.name),
         (unit.items ?? []).map((item) => itemIdFromSource(item, catalogs)).filter(Boolean),
-        typeof unit.boardIndex === "number" ? unit.boardIndex : undefined
-      )
-    )
+        typeof unit.boardIndex === "number" ? unit.boardIndex : undefined,
+        starLevel
+      );
+    })
     .filter((unit): unit is SourceUnit => Boolean(unit));
 }
 
@@ -698,6 +875,7 @@ async function loadMobalyticsLookups(): Promise<MobalyticsLookups> {
   const augmentRankBySlug: Record<string, string> = {};
   const augmentNameByApi: Record<string, string> = {};
   const augmentDescriptionByApi: Record<string, string> = {};
+  const itemIdBySlug = buildMobalyticsItemIdBySlug(stat);
   for (const [key, raw] of Object.entries(stat)) {
     if (!key.startsWith("HextechAugmentsDataFlatDto")) {
       continue;
@@ -760,7 +938,9 @@ async function loadMobalyticsLookups(): Promise<MobalyticsLookups> {
             boardIndex: Number.isFinite(Number(position.coordinates))
               ? Number(position.coordinates)
               : undefined,
-            itemIds: (position.champion?.items ?? []).map((item: any) => normalizeId(item.slug)).filter(Boolean),
+            itemIds: (position.champion?.items ?? [])
+              .map((item: any) => itemIdBySlug[normalizeId(item.slug)] ?? normalizeId(item.slug))
+              .filter(Boolean),
             starLevel
           } satisfies SourceUnit;
         })
@@ -870,6 +1050,7 @@ async function populateMobalyticsTeamCodes(comps: SourceComp[]) {
 
 async function loadTftAcademySourceComps(catalogs: Pick<Catalogs, "itemIdByApiName">) {
   const html = await fetchText(TFTACADEMY_COMPS_URL);
+  const renderedTiersBySlug = parseTftAcademyTierMap(html);
   const script = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)]
     .map((match) => match[1])
     .find((entry) => entry.includes("guides:["));
@@ -883,20 +1064,40 @@ async function loadTftAcademySourceComps(catalogs: Pick<Catalogs, "itemIdByApiNa
   }
 
   const guides = Function(`"use strict"; return (${guidesSource});`)() as any[];
+  const missingTierSlugs = guides
+    .map((guide) => cleanText(guide.compSlug))
+    .filter((slug) => slug && !renderedTiersBySlug[slug]);
+  const detailTiersBySlug = Object.fromEntries(
+    await Promise.all(
+      missingTierSlugs.map(async (slug) => {
+        try {
+          return [slug, parseTftAcademyDetailTier(await fetchText(`https://tftacademy.com/tierlist/comps/${slug}`))];
+        } catch (error) {
+          console.warn(`TFT Academy detail rank fetch failed for ${slug}:`, error);
+          return [slug, ""];
+        }
+      })
+    )
+  );
+
   return guides.map((guide) => {
     const title = cleanText(guide.metaTitle || guide.title || guide.compSlug);
+    const compSlug = cleanText(guide.compSlug);
+    const guideTier = normalizeCompTier(guide.tier);
+    const renderedTier = normalizeCompTier(renderedTiersBySlug[compSlug] || detailTiersBySlug[compSlug]);
     const finalUnits = normalizeSourceUnits(guide.finalComp, catalogs);
     const earlyUnits = normalizeSourceUnits(guide.earlyComp, catalogs);
-    const augments = [...(guide.augments ?? []), ...(guide.overlayAugments ?? [])]
+    const augments = [guide.mainAugment, ...(guide.augments ?? []), ...(guide.overlayAugments ?? [])]
+      .filter((augment: any) => augment && augment.disabled !== true)
       .map((augment: any) => ({ apiName: cleanText(augment.apiName) }))
       .filter((augment: SourceAugment) => Boolean(augment.apiName));
 
     return {
       source: "tftacademy" as const,
-      externalId: cleanText(guide.id || guide.compSlug || title),
+      externalId: cleanText(guide.id || compSlug || title),
       title,
-      url: `https://tftacademy.com/tierlist/comps/${guide.compSlug}`,
-      tier: cleanText(guide.tier),
+      url: `https://tftacademy.com/tierlist/comps/${compSlug}`,
+      tier: guideTier || renderedTier || undefined,
       playstyle: cleanText(guide.style),
       units: finalUnits.length ? finalUnits : earlyUnits,
       earlyUnits,
@@ -912,7 +1113,7 @@ async function loadTftAcademySourceComps(catalogs: Pick<Catalogs, "itemIdByApiNa
       createdAt: guide.created,
       updatedAt: guide.updated
     } satisfies SourceComp;
-  });
+  }).filter((comp) => comp.externalId && !comp.title.toLowerCase().includes("(copy)"));
 }
 
 async function loadTftacticsSourceComps() {
@@ -924,6 +1125,7 @@ async function loadTftacticsSourceComps() {
       const title = cleanText(card.querySelector(".team-name-elipsis")?.childNodes.item(0)?.textContent);
       const tier = cleanText(card.querySelector(".team-rank")?.textContent);
       const playstyle = cleanText(card.querySelector(".team-playstyle")?.textContent);
+      const requiresAugment = Boolean(card.querySelector(".team-playstyle.augment"));
       const units = [...card.querySelectorAll(".team-characters > a.characters-item")]
         .map((link) => {
           const championId = championIdFromName(link.querySelector(".team-character-name")?.textContent || link.textContent);
@@ -941,6 +1143,9 @@ async function loadTftacticsSourceComps() {
         url: TFTACTICS_COMPS_URL,
         tier,
         playstyle,
+        augments: requiresAugment && title ? [{ name: title }] : [],
+        augmentTypes: requiresAugment ? ["Augment"] : [],
+        augmentsTip: requiresAugment ? `Requires the ${title} augment.` : undefined,
         units,
         finalUnits: units
       } satisfies SourceComp;
@@ -954,20 +1159,228 @@ function championIdFromTftflowImage(image: Element) {
     return altId;
   }
 
-  const href =
-    image.getAttribute("href") ??
-    image.getAttribute("xlink:href") ??
-    image.getAttribute("src") ??
-    "";
-  const fileName = href.split("/").pop() ?? "";
-  const apiName = fileName
-    .replace(/\?.*$/, "")
-    .replace(/\.(?:tft_set\d+\.)?png$/i, "")
-    .replace(/_square.*$/i, "");
+  const apiName = apiNameFromTftflowAsset(imageAssetUrl(image));
   return idFromApiName(apiName);
 }
 
-async function loadTftflowDetailComp(link: HTMLAnchorElement, index: number): Promise<SourceComp> {
+function imageAssetUrl(image: Element) {
+  return (
+    image.getAttribute("href") ??
+    image.getAttribute("xlink:href") ??
+    image.getAttribute("src") ??
+    image.getAttribute("data-src") ??
+    ""
+  );
+}
+
+function apiNameFromTftflowAsset(assetUrl: string) {
+  const fileName = decodeURIComponent(assetUrl.split(/[?#]/)[0].split("/").pop() ?? "");
+  return fileName
+    .replace(/\.(?:tft_set\d+\.)?png$/i, "")
+    .replace(/\.(?:png|webp|jpg|jpeg)$/i, "")
+    .replace(/_square.*$/i, "");
+}
+
+function itemIdFromTftflowImage(image: Element, catalogs: Pick<Catalogs, "itemIdByApiName">) {
+  const href = imageAssetUrl(image);
+  const apiName = cleanText(image.getAttribute("data-item-apiname")) || apiNameFromTftflowAsset(href);
+  return itemIdFromSource(apiName, catalogs);
+}
+
+function isTftflowChampionImage(image: Element) {
+  const href = imageAssetUrl(image).toLowerCase();
+  return href.includes("/champions/") || href.includes("champion");
+}
+
+function isTftflowItemImage(image: Element) {
+  const href = imageAssetUrl(image).toLowerCase();
+  const apiName = apiNameFromTftflowAsset(href);
+  return href.includes("/items/") || /^tft_?item/i.test(apiName) || /^tft\d+_emblem_/i.test(apiName);
+}
+
+function parseTftflowTier(document: Document) {
+  const selectors = [
+    ".builder-comp-options-container .tier-dropdown-label",
+    ".builder-comp-options-container .tier-icon-button",
+    ".tier-dropdown-label",
+    ".comp-tier",
+    "[class*='tier']"
+  ];
+
+  for (const selector of selectors) {
+    for (const element of document.querySelectorAll(selector)) {
+      const text = cleanText(element.textContent).replace(/Tier$/i, "").trim();
+      const match = text.match(/\b(S\+?|A\+?|B\+?|C\+?|D)\b/i);
+      if (match) {
+        return match[1].toUpperCase();
+      }
+    }
+  }
+
+  return "";
+}
+
+function parseTftflowAugmentTypes(document: Document) {
+  return cleanText(document.querySelector(".comp-augment-priority")?.textContent)
+    .split(/[+/,&]/)
+    .map(cleanText)
+    .filter(Boolean);
+}
+
+function parseTftflowConditionName(text: string) {
+  const name = cleanText(text)
+    .replace(/\b[SABCD]\+?\s*(?:->|→)\s*[SABCD]\+?.*$/i, "")
+    .split(/:|(?:->)|(?:→)/)[0]
+    .replace(/^\+\d+\s*/, "")
+    .trim();
+  return name;
+}
+
+function parseTftflowAugments(document: Document): SourceAugment[] {
+  const augments = new Map<string, SourceAugment>();
+  const addAugment = (augment: SourceAugment) => {
+    const apiName = cleanText(augment.apiName);
+    const name = cleanText(augment.name);
+    if (!apiName && (!name || /augment priority/i.test(name))) {
+      return;
+    }
+
+    const key = apiName || normalizeAugmentLookup(name);
+    if (!key || augments.has(key)) {
+      return;
+    }
+    augments.set(key, { apiName: apiName || undefined, name: name || undefined });
+  };
+
+  for (const element of document.querySelectorAll("[data-augment-apiname]")) {
+    const apiName = cleanText(element.getAttribute("data-augment-apiname"));
+    const name =
+      cleanText(element.getAttribute("alt")) ||
+      cleanText(element.closest(".condition-item, [class*='condition-item']")?.querySelector(".modal-item-name")?.textContent) ||
+      parseTftflowConditionName(element.closest(".condition-item, [class*='condition-item']")?.textContent ?? "");
+
+    addAugment({ apiName, name });
+  }
+
+  for (const element of document.querySelectorAll(".augment-name, [class*='augment-name']")) {
+    const name = cleanText(element.textContent);
+    addAugment({ name });
+  }
+
+  for (const element of document.querySelectorAll(".condition-card, .condition-li-content, [class*='condition-card']")) {
+    const name = parseTftflowConditionName(element.textContent ?? "");
+    if (name && !/emblem$/i.test(name)) {
+      addAugment({ name });
+    }
+  }
+
+  return [...augments.values()];
+}
+
+function parseTftflowTips(document: Document) {
+  const tips: SourceComp["tips"] = [];
+
+  for (const element of document.querySelectorAll(".tips-li-content, [class*='tips-li-content']")) {
+    const tip = cleanText(element.textContent);
+    if (tip) {
+      tips.push({ stage: "TFTFlow tips", tip });
+    }
+  }
+
+  for (const element of document.querySelectorAll(".condition-card, .condition-li-content, [class*='condition-card']")) {
+    const tip = cleanText(element.textContent);
+    if (tip) {
+      tips.push({ stage: "Strong conditions", tip });
+    }
+  }
+
+  return tips;
+}
+
+function parseTftflowLevelingLines(document: Document) {
+  return [...document.querySelectorAll(".econ-li-content, [class*='econ-li-content']")]
+    .map((element) => cleanText(element.textContent))
+    .filter(Boolean);
+}
+
+function parseTftflowBoardUnits(board: Element | null, catalogs: Pick<Catalogs, "itemIdByApiName">) {
+  if (!board) {
+    return [];
+  }
+
+  const containers = [...board.querySelectorAll(".board-unit, .unit-container, [data-champion-apiname], g, div")].filter(
+    (container) => [...container.querySelectorAll("image, img")].filter(isTftflowChampionImage).length === 1
+  );
+  if (!containers.length) {
+    return [...board.querySelectorAll("image, img")]
+      .filter(isTftflowChampionImage)
+      .map((image, index) => buildSourceUnitFromChampionId(championIdFromTftflowImage(image), [], index))
+      .filter((unit): unit is SourceUnit => Boolean(unit));
+  }
+
+  return containers
+    .map((container, index) => {
+      const images = [...container.querySelectorAll("image, img")];
+      const championImage = images.find(isTftflowChampionImage);
+      if (!championImage) {
+        return null;
+      }
+
+      const championId = championIdFromTftflowImage(championImage);
+      const itemIds = images
+        .filter((image) => image !== championImage && isTftflowItemImage(image))
+        .map((image) => itemIdFromTftflowImage(image, catalogs))
+        .filter(Boolean);
+
+      return buildSourceUnitFromChampionId(championId, itemIds, index);
+    })
+    .filter((unit): unit is SourceUnit => Boolean(unit));
+}
+
+export function parseTftflowDetailHtml(
+  html: string,
+  url: string,
+  index: number,
+  catalogs: Pick<Catalogs, "itemIdByApiName">
+): SourceComp {
+  const detailDocument = parseHtmlDocument(html);
+  const detailTitle =
+    cleanText(detailDocument.querySelector(".comp-title")?.textContent) ||
+    cleanText(detailDocument.querySelector("h1")?.textContent) ||
+    `TFTFlow Comp ${index + 1}`;
+  const tier = parseTftflowTier(detailDocument);
+  const playstyle = cleanText(detailDocument.querySelector(".comp-econ-strategy-label")?.textContent);
+  const board = detailDocument.querySelector(".boards-flex-container") ?? detailDocument.querySelector("[class*='boards']");
+  const units = uniqueUnits(parseTftflowBoardUnits(board, catalogs));
+  const augmentTypes = parseTftflowAugmentTypes(detailDocument);
+  const levelingLines = parseTftflowLevelingLines(detailDocument);
+  const tips = [
+    ...parseTftflowTips(detailDocument),
+    ...levelingLines.map((line) => ({ stage: "Levelling guide", tip: line }))
+  ];
+
+  return {
+    source: "tftflow" as const,
+    externalId: `tftflow-${index}-${normalizeId(detailTitle)}`,
+    title: detailTitle,
+    url,
+    tier,
+    playstyle,
+    units,
+    finalUnits: units,
+    augments: parseTftflowAugments(detailDocument),
+    augmentTypes,
+    augmentsTip: augmentTypes.length ? `Preferred augment angle: ${augmentTypes.join(", ")}.` : undefined,
+    tips,
+    levelingLines
+  } satisfies SourceComp;
+}
+
+async function loadTftflowDetailComp(
+  link: HTMLAnchorElement,
+  index: number,
+  catalogs: Pick<Catalogs, "itemIdByApiName">
+): Promise<SourceComp> {
   const title = cleanText(link.textContent);
   const url = link.href || TFTFLOW_COMPS_URL;
   const fallbackWrapper = link.closest(".comp-card-wrapper") ?? link.parentElement;
@@ -976,25 +1389,13 @@ async function loadTftflowDetailComp(link: HTMLAnchorElement, index: number): Pr
     .filter((unit): unit is SourceUnit => Boolean(unit));
 
   try {
-    const detailDocument = parseHtmlDocument(await fetchText(url));
-    const detailTitle = cleanText(detailDocument.querySelector(".comp-title")?.textContent) || title;
-    const tier = cleanText(detailDocument.querySelector(".comp-tier")?.textContent).replace(/Tier$/i, "");
-    const playstyle = cleanText(detailDocument.querySelector(".comp-econ-strategy-label")?.textContent);
-    const board = detailDocument.querySelector(".boards-flex-container");
-    const units = [...(board?.querySelectorAll("image[href*='/champions/'], image[xlink\\:href*='/champions/']") ?? [])]
-      .map((image) => buildSourceUnitFromChampionId(championIdFromTftflowImage(image)))
-      .filter((unit): unit is SourceUnit => Boolean(unit));
-
+    const parsed = parseTftflowDetailHtml(await fetchText(url), url, index, catalogs);
+    const units = parsed.units.length ? parsed.units : uniqueUnits(fallbackUnits);
     return {
-      source: "tftflow" as const,
-      externalId: `tftflow-${index}-${normalizeId(detailTitle)}`,
-      title: detailTitle,
-      url,
-      tier: cleanText(tier).toUpperCase(),
-      playstyle,
-      units: uniqueUnits(units.length ? units : fallbackUnits),
-      finalUnits: uniqueUnits(units.length ? units : fallbackUnits)
-    } satisfies SourceComp;
+      ...parsed,
+      units,
+      finalUnits: parsed.finalUnits?.length ? parsed.finalUnits : units
+    };
   } catch (error) {
     console.warn(`TFTFlow detail fetch failed for ${url}:`, error);
     return {
@@ -1008,39 +1409,273 @@ async function loadTftflowDetailComp(link: HTMLAnchorElement, index: number): Pr
   }
 }
 
-async function loadTftflowSourceComps() {
+async function loadTftflowSourceComps(catalogs: Pick<Catalogs, "itemIdByApiName">) {
   const html = await fetchText(TFTFLOW_COMPS_URL);
   const document = parseHtmlDocument(html);
 
   const links = [...document.querySelectorAll<HTMLAnchorElement>(".meta-tier-comp-link")].filter((link) =>
     Boolean(cleanText(link.textContent))
   );
-  const comps = await Promise.all(links.map((link, index) => loadTftflowDetailComp(link, index)));
+  const comps = await Promise.all(links.map((link, index) => loadTftflowDetailComp(link, index, catalogs)));
   return comps.filter((comp) => comp.title);
 }
 
-async function loadMetaTftSourceComps() {
+type MetaTftNameEntry = {
+  name?: string;
+  score?: number;
+  type?: string;
+};
+
+function metaTftNameEntries(cluster: any): MetaTftNameEntry[] {
+  return Array.isArray(cluster.name) ? cluster.name : [];
+}
+
+function metaTftChampionIdFromSignal(apiName: string | null | undefined, catalogs: Pick<Catalogs, "championsById">) {
+  const direct = idFromApiName(apiName);
+  if (direct && catalogs.championsById[direct]) {
+    return direct;
+  }
+
+  const carryMatch = cleanText(apiName).match(/^TFT\d+_Augment_(?<champion>.+?)Carry$/i);
+  if (carryMatch?.groups?.champion) {
+    const carryChampionId = idFromApiName(`TFT${CURRENT_SET}_${carryMatch.groups.champion}`);
+    if (catalogs.championsById[carryChampionId]) {
+      return carryChampionId;
+    }
+  }
+
+  return "";
+}
+
+function metaTftSignalTitle(
+  apiName: string,
+  catalogs: Pick<Catalogs, "championsById" | "synergiesById" | "synergyNameByApiName">
+) {
+  const championId = metaTftChampionIdFromSignal(apiName, catalogs);
+  if (championId) {
+    const championName = catalogs.championsById[championId]?.name ?? titleFromApiName(apiName);
+    return /_Augment_/i.test(apiName) ? `${championName} Carry` : championName;
+  }
+
+  const traitName =
+    catalogs.synergyNameByApiName[apiName] ??
+    catalogs.synergyNameByApiName[apiName.replace(/_\d+$/, "")] ??
+    null;
+  if (traitName) {
+    return traitName;
+  }
+
+  return titleFromApiName(apiName).replace(/^Augment\s+/i, "");
+}
+
+function buildMetaTftUrl(cluster: any, entries: MetaTftNameEntry[]) {
+  const navId = entries.map((entry) => cleanText(entry.name)).filter(Boolean).join("-");
+  return `https://www.metatft.com/comps#${navId || `row_${cluster.Cluster}`}`;
+}
+
+function bestMetaTftOption(optionsData: any, clusterId: string) {
+  const optionGroups = optionsData?.results?.options?.[clusterId] ?? {};
+  const options = Object.entries(optionGroups).flatMap(([level, entries]) =>
+    Array.isArray(entries) ? entries.map((entry) => ({ ...entry, parsedLevel: Number(level) || 0 })) : []
+  );
+
+  return options
+    .filter((entry) => cleanText(entry.units_list))
+    .sort(
+      (left, right) =>
+        Number(right.parsedLevel ?? 0) - Number(left.parsedLevel ?? 0) ||
+        Number(right.score ?? 0) - Number(left.score ?? 0) ||
+        Number(right.count ?? 0) - Number(left.count ?? 0)
+    )[0];
+}
+
+function sourceUnitsFromMetaTftOption(option: any, fallbackUnits: SourceUnit[]) {
+  const units = cleanText(option?.units_list)
+    .split("&")
+    .map((entry) => buildSourceUnitFromChampionId(idFromApiName(entry.trim())))
+    .filter((unit): unit is SourceUnit => Boolean(unit));
+
+  return units.length ? units : fallbackUnits;
+}
+
+function metaTftOverallAverage(augmentData: any, clusterId: string) {
+  const value = augmentData?.results?.overall?.[clusterId]?.[0]?.avg;
+  return typeof value === "number" ? value : null;
+}
+
+function deriveMetaTftTier(avg: number | null, index: number, total: number) {
+  if (typeof avg === "number") {
+    if (avg <= 4.05) return "S";
+    if (avg <= 4.25) return "A";
+    if (avg <= 4.5) return "B";
+    if (avg <= 4.8) return "C";
+    return "D";
+  }
+
+  const pct = total <= 1 ? 0 : index / total;
+  if (pct <= 0.12) return "S";
+  if (pct <= 0.35) return "A";
+  if (pct <= 0.7) return "B";
+  return "C";
+}
+
+function inferMetaTftPlaystyle(
+  units: SourceUnit[],
+  mainChampionId: string,
+  option: any,
+  catalogs: Pick<Catalogs, "championsById">
+) {
+  const coreCost = mainChampionId ? catalogs.championsById[mainChampionId]?.cost : null;
+  if (coreCost && coreCost <= 3) {
+    return `${coreCost}-Cost Reroll`;
+  }
+  if (coreCost === 4) {
+    return "Fast 8";
+  }
+
+  const maxCost = Math.max(...units.map((unit) => catalogs.championsById[unit.championId]?.cost ?? 0), 0);
+  const optionLevel = Number(option?.parsedLevel ?? 0);
+  if (coreCost === 5 || optionLevel >= 9 || (maxCost >= 5 && units.length >= 8)) {
+    return "Fast 9";
+  }
+  if (maxCost >= 4) {
+    return "Fast 8";
+  }
+  return "Standard";
+}
+
+function metaTftBuildItemsByChampion(buildData: any, clusterId: string, catalogs: Pick<Catalogs, "itemIdByApiName">) {
+  const builds = buildData?.results?.[clusterId]?.builds ?? [];
+  const itemsByChampion = new Map<string, string[]>();
+
+  [...builds]
+    .sort(
+      (left, right) =>
+        Number(right.score ?? right.adjusted_score ?? 0) - Number(left.score ?? left.adjusted_score ?? 0) ||
+        Number(right.count ?? 0) - Number(left.count ?? 0)
+    )
+    .forEach((build) => {
+      const championId = idFromApiName(build.unit);
+      if (!championId || itemsByChampion.has(championId)) {
+        return;
+      }
+
+      const itemIds = (Array.isArray(build.buildName) ? (build.buildName as string[]) : [])
+        .map((apiName) => itemIdFromSource(apiName, catalogs))
+        .filter((itemId): itemId is string => Boolean(itemId))
+        .slice(0, 3);
+
+      if (itemIds.length) {
+        itemsByChampion.set(championId, itemIds);
+      }
+    });
+
+  return itemsByChampion;
+}
+
+function applyMetaTftItems(units: SourceUnit[], itemsByChampion: Map<string, string[]>) {
+  return units.map((unit) => ({
+    ...unit,
+    itemIds: itemsByChampion.get(unit.championId) ?? unit.itemIds
+  }));
+}
+
+function ensureReferencedAugments(sourceComps: SourceComp[], catalogs: Catalogs) {
+  for (const comp of sourceComps) {
+    if (comp.source !== "metatft") {
+      continue;
+    }
+    for (const augment of comp.augments ?? []) {
+      const augmentId = sourceAugmentId(augment, catalogs);
+      if (!augmentId || catalogs.augmentsById[augmentId]) {
+        continue;
+      }
+
+      const championId = metaTftChampionIdFromSignal(augment.apiName, catalogs);
+      const name = cleanText(augment.name) || titleFromApiName(augment.apiName ?? augment.slug ?? augmentId);
+      catalogs.augmentsById[augmentId] = {
+        id: augmentId,
+        name,
+        tier: "Unknown",
+        description: `MetaTFT identifies ${name} as a defining augment for this cluster.`,
+        icon: championId ? catalogs.championsById[championId].icon : toWebPath("assets", "system", "lock.svg")
+      };
+      if (augment.apiName) {
+        catalogs.augmentIdByApiName[augment.apiName] = augmentId;
+      }
+      catalogs.augmentIdByLookup[normalizeAugmentLookup(name)] = augmentId;
+    }
+  }
+}
+
+async function loadMetaTftSourceComps(
+  catalogs: Pick<Catalogs, "championsById" | "synergiesById" | "synergyNameByApiName" | "itemIdByApiName">
+) {
   const data = await fetchJson<any>(METATFT_CLUSTER_URL);
+  const [buildData, augmentData, optionsData] = await Promise.all([
+    fetchJson<any>(METATFT_BUILD_URL),
+    fetchJson<any>(METATFT_AUGMENT_URL),
+    fetchJson<any>(METATFT_OPTIONS_URL)
+  ]);
   const clusters = data.cluster_info?.cluster_details?.clusters ?? [];
 
-  return clusters.map((cluster: any) => {
-    const units = cleanText(cluster.units_string)
+  return clusters.map((cluster: any, index: number) => {
+    const clusterId = String(cluster.Cluster);
+    const entries = metaTftNameEntries(cluster);
+    const fallbackUnits = cleanText(cluster.units_string)
       .split(",")
       .map((entry) => buildSourceUnitFromChampionId(idFromApiName(entry.trim())))
       .filter((unit): unit is SourceUnit => Boolean(unit));
-    const nameParts = cleanText(cluster.name_string)
-      .split(",")
-      .map((entry) => titleFromApiName(entry.trim()))
-      .filter(Boolean);
+    const option = bestMetaTftOption(optionsData, clusterId);
+    const rawUnits = sourceUnitsFromMetaTftOption(option, fallbackUnits);
+    const buildItems = metaTftBuildItemsByChampion(buildData, clusterId, catalogs);
+    const units = applyMetaTftItems(rawUnits, buildItems);
+    const nameParts = entries.map((entry) => metaTftSignalTitle(cleanText(entry.name), catalogs)).filter(Boolean);
     const title = nameParts.length ? nameParts.join(" ") : `MetaTFT Cluster ${cluster.Cluster}`;
+    const mainChampionId =
+      entries.map((entry) => metaTftChampionIdFromSignal(entry.name, catalogs)).find(Boolean) ??
+      units
+        .slice()
+        .sort(
+          (left, right) =>
+            (catalogs.championsById[right.championId]?.cost ?? 0) - (catalogs.championsById[left.championId]?.cost ?? 0)
+        )[0]?.championId ??
+      "";
+    const avg = metaTftOverallAverage(augmentData, clusterId);
+    const playstyle = inferMetaTftPlaystyle(units, mainChampionId, option, catalogs);
+    const topItemId = (mainChampionId && buildItems.get(mainChampionId)?.[0]) || [...buildItems.values()][0]?.[0] || "";
+    const augmentSignals = entries
+      .filter((entry) => /_Augment_/i.test(cleanText(entry.name)))
+      .map((entry) => ({
+        apiName: cleanText(entry.name),
+        name: metaTftSignalTitle(cleanText(entry.name), catalogs)
+      }));
+    const topItemUnits = [...buildItems.keys()]
+      .slice(0, 3)
+      .map((championId) => catalogs.championsById[championId]?.name)
+      .filter(Boolean);
 
     return {
       source: "metatft" as const,
-      externalId: String(cluster.Cluster),
+      externalId: clusterId,
       title,
-      url: "https://www.metatft.com/comps",
+      url: buildMetaTftUrl(cluster, entries),
+      tier: deriveMetaTftTier(avg, index, clusters.length),
+      playstyle,
       units,
-      finalUnits: units
+      finalUnits: units,
+      augments: augmentSignals,
+      augmentTypes: augmentSignals.length ? ["cluster-specific"] : [],
+      augmentsTip: augmentSignals.length
+        ? `MetaTFT cluster-defining augment: ${augmentSignals.map((augment) => augment.name).join(", ")}.`
+        : "",
+      tips: compactLines([
+        typeof avg === "number" ? `Average placement ${avg.toFixed(2)} in MetaTFT cluster stats.` : null,
+        topItemUnits.length ? `Top itemized units from MetaTFT: ${topItemUnits.join(", ")}.` : null,
+        `Cluster link opens MetaTFT row ${clusterId}.`
+      ]).map((tip) => ({ stage: "Overview", tip })),
+      mainChampionId,
+      mainItemId: topItemId
     } satisfies SourceComp;
   });
 }
@@ -1125,11 +1760,12 @@ function unitsToPhaseData(
     index,
     championId: null,
     locked: false,
-    itemIds: []
+    itemIds: [],
+    starLevel: 1
   }));
 
   const championLevels: Record<string, number> = {};
-  for (const unit of inferBoardIndexes(uniqueUnits(sourceUnits), catalogs)) {
+  for (const unit of inferBoardIndexes(sourceUnits, catalogs)) {
     if (typeof unit.boardIndex !== "number" || unit.boardIndex < 0 || unit.boardIndex > 27) {
       continue;
     }
@@ -1140,7 +1776,8 @@ function unitsToPhaseData(
       index: unit.boardIndex,
       championId: unit.championId,
       locked: catalogs.championsById[unit.championId].requiresUnlock,
-      itemIds: unit.itemIds
+      itemIds: unit.itemIds,
+      starLevel: unit.starLevel ?? 1
     };
     if (typeof unit.starLevel === "number" && unit.starLevel > 1) {
       championLevels[unit.championId] = Math.max(championLevels[unit.championId] ?? 1, unit.starLevel);
@@ -1161,7 +1798,14 @@ function unitsToPhaseData(
   return { boardSlots, championIds, synergyIds, championLevels };
 }
 
-function buildLevelGuide(playstyle: string | undefined): GuideSection {
+function buildLevelGuide(playstyle: string | undefined, levelingLines?: string[]): GuideSection {
+  if (levelingLines?.length) {
+    return {
+      title: "Levelling guide",
+      lines: levelingLines
+    };
+  }
+
   const style = cleanText(playstyle).toLowerCase();
   if (style.includes("1-cost") || style.includes("1 cost")) {
     return {
@@ -1260,7 +1904,7 @@ function buildGuide(comp: SourceComp, contributors: SourceComp[], catalogs: Pick
         ...allTips.slice(0, 2).map((tip) => `${tip.stage}: ${tip.tip}`)
       ])
     },
-    buildLevelGuide(comp.playstyle)
+    buildLevelGuide(comp.playstyle, comp.levelingLines)
   ].filter((section) => section.lines.length);
 
   const earlyLines = sectionsByStage(allTips, /stage 2|early/i);
@@ -1320,6 +1964,90 @@ function buildComponentDemand(rawLateBoard: SourceUnit[], catalogs: Pick<Catalog
     .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
 }
 
+function findEmblemSynergy(itemId: string, synergiesById: Dataset["synergiesById"]) {
+  if (!itemId.endsWith("-emblem")) {
+    return null;
+  }
+
+  const traitId = itemId.replace(/-emblem$/, "");
+  return (
+    synergiesById[traitId] ??
+    Object.values(synergiesById).find((synergy) => synergy.id.replace(/-/g, "") === traitId.replace(/-/g, "")) ??
+    null
+  );
+}
+
+function findCatalogItemForUsedId(itemId: string, catalogs: Catalogs) {
+  const direct = catalogs.itemsById[itemId];
+  if (direct) {
+    return direct;
+  }
+
+  const compactCandidates = new Set([itemId.replace(/-/g, "")]);
+  compactCandidates.add(itemId.replace(/-\d+$/g, "").replace(/\d+$/g, "").replace(/-/g, ""));
+
+  return (
+    Object.values(catalogs.itemsById).find((item) => {
+      const compactItemId = item.id.replace(/-/g, "");
+      return compactCandidates.has(compactItemId);
+    }) ?? null
+  );
+}
+
+let localItemAssetFiles: string[] | null = null;
+
+function getLocalItemAssetFiles() {
+  if (!localItemAssetFiles) {
+    const itemAssetDir = path.join(PUBLIC_ASSETS_DIR, "items");
+    localItemAssetFiles = fsSync.existsSync(itemAssetDir)
+      ? fsSync.readdirSync(itemAssetDir).filter((fileName) => fileName.toLowerCase().endsWith(".png"))
+      : [];
+  }
+  return localItemAssetFiles;
+}
+
+function localItemIconForId(itemId: string) {
+  const compactId = itemId.replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const match = getLocalItemAssetFiles().find((fileName) => {
+    const compactFile = path.basename(fileName, ".png").replace(/[^a-z0-9]/gi, "").toLowerCase();
+    return compactFile === compactId;
+  });
+
+  return match ? toWebPath("assets", "items", match) : toWebPath("assets", "items", "missingno.png");
+}
+
+function buildUsedItemsById(usedItemIds: Set<string>, catalogs: Catalogs): Dataset["itemsById"] {
+  const itemsById: Dataset["itemsById"] = {};
+
+  for (const itemId of usedItemIds) {
+    const existing = findCatalogItemForUsedId(itemId, catalogs);
+    if (existing) {
+      itemsById[itemId] = { ...existing, id: itemId };
+      continue;
+    }
+
+    const synergy = findEmblemSynergy(itemId, catalogs.synergiesById);
+    if (synergy) {
+      itemsById[itemId] = {
+        id: itemId,
+        name: `${synergy.name} Emblem`,
+        description: `Counts as ${synergy.name}.`,
+        icon: synergy.icon
+      };
+      continue;
+    }
+
+    itemsById[itemId] = {
+      id: itemId,
+      name: COMPONENT_LABELS[itemId] ?? titleCaseFromSlug(itemId),
+      description: "",
+      icon: localItemIconForId(itemId)
+    };
+  }
+
+  return itemsById;
+}
+
 function buildCompFromSourceComp(comp: SourceComp, catalogs: Catalogs): Comp {
   const finalUnits = comp.finalUnits?.length ? comp.finalUnits : comp.units;
   const earlyUnits = comp.earlyUnits?.length ? comp.earlyUnits : fallbackEarlyUnits(finalUnits, catalogs);
@@ -1329,7 +2057,7 @@ function buildCompFromSourceComp(comp: SourceComp, catalogs: Catalogs): Comp {
     new Set(
       (comp.augments ?? [])
         .map((augment) => sourceAugmentId(augment, catalogs))
-        .filter((augmentId): augmentId is string => Boolean(augmentId))
+        .filter((augmentId): augmentId is string => Boolean(augmentId && catalogs.augmentsById[augmentId]))
     )
   ).slice(0, 9);
 
@@ -1355,8 +2083,60 @@ function buildCompFromSourceComp(comp: SourceComp, catalogs: Catalogs): Comp {
     guide: buildGuide(comp, [comp], catalogs),
     componentDemand: buildComponentDemand(finalUnits, catalogs),
     notes: `${providerName} provider build.`,
-    teamCode: comp.teamCode
+    teamCode: buildProviderTeamPlannerCode(comp, finalUnits, catalogs)
   };
+}
+
+function buildProviderTeamPlannerCode(comp: SourceComp, finalUnits: SourceUnit[], catalogs: Catalogs) {
+  const scrapedCode = cleanText(comp.teamCode);
+  if (scrapedCode) {
+    return scrapedCode;
+  }
+
+  const sourceUnits = comp.source === "tftacademy" ? sortTftAcademyTeamPlannerUnits(finalUnits, catalogs) : finalUnits;
+  return encodeRiotTeamPlannerCode(sourceUnits, catalogs);
+}
+
+function sortTftAcademyTeamPlannerUnits(sourceUnits: SourceUnit[], catalogs: Pick<Catalogs, "championsById">) {
+  return sourceUnits
+    .map((unit, sourceIndex) => ({ unit, sourceIndex }))
+    .sort((left, right) => {
+      const leftChampion = catalogs.championsById[left.unit.championId];
+      const rightChampion = catalogs.championsById[right.unit.championId];
+      const costDelta = (leftChampion?.cost ?? 99) - (rightChampion?.cost ?? 99);
+      if (costDelta) {
+        return costDelta;
+      }
+
+      const itemDelta = left.unit.itemIds.length - right.unit.itemIds.length;
+      if (itemDelta) {
+        return itemDelta;
+      }
+
+      const nameDelta = (leftChampion?.name ?? left.unit.championId).localeCompare(
+        rightChampion?.name ?? right.unit.championId
+      );
+      return nameDelta || left.sourceIndex - right.sourceIndex;
+    })
+    .map((entry) => entry.unit);
+}
+
+function encodeRiotTeamPlannerCode(sourceUnits: SourceUnit[], catalogs: Pick<Catalogs, "teamPlannerCodeByChampionId">) {
+  const championCodes = sourceUnits
+    .map((unit) => catalogs.teamPlannerCodeByChampionId[unit.championId])
+    .filter((code): code is number => Number.isFinite(code) && code > 0)
+    .slice(0, 10);
+
+  if (!championCodes.length) {
+    return undefined;
+  }
+
+  const chunks = Array.from({ length: 10 }, (_, index) =>
+    Math.trunc(championCodes[index] ?? 0)
+      .toString(16)
+      .padStart(3, "0")
+  );
+  return `02${chunks.join("")}TFTSet${CURRENT_SET}`;
 }
 
 function dedupeCompIds(comps: Comp[]) {
@@ -1372,26 +2152,28 @@ export async function buildDataset() {
   await ensureDirectory(PUBLIC_DATA_DIR);
   await ensureDirectory(PUBLIC_ASSETS_DIR);
 
-  const [cdragon, mobalytics] = await Promise.all([
+  const [cdragon, teamPlanner, mobalytics] = await Promise.all([
     fetchJson<CDragonTftData>(CDRAGON_TFT_URL),
+    fetchJson<TeamPlannerData>(CDRAGON_TEAM_PLANNER_URL),
     loadMobalyticsLookups()
   ]);
 
-  const catalogs = buildCatalogs(cdragon, mobalytics);
-  const [academyComps, tftacticsComps, tftflowComps, metatftComps] = await Promise.all([
+  const catalogs = buildCatalogs(cdragon, mobalytics, teamPlanner);
+  const [academyComps, tftacticsComps, tftflowComps] = await Promise.all([
     loadTftAcademySourceComps(catalogs),
     loadTftacticsSourceComps(),
-    loadTftflowSourceComps(),
-    loadMetaTftSourceComps()
+    loadTftflowSourceComps(catalogs)
   ]);
 
-  const sourceComps = [...academyComps, ...mobalytics.comps, ...tftacticsComps, ...tftflowComps, ...metatftComps].filter(
+  const sourceComps = [...academyComps, ...mobalytics.comps, ...tftacticsComps, ...tftflowComps].filter(
     (comp) => comp.units.length >= 3 || Boolean(comp.finalUnits?.length) || comp.source === "tftflow"
   );
+  ensureReferencedAugments(sourceComps, catalogs);
   const comps = dedupeCompIds(
     sourceComps
       .map((comp) => buildCompFromSourceComp(comp, catalogs))
       .filter((comp) => comp.phases.late.championIds.length >= 3)
+      .filter((comp) => comp.recommendedAugmentIds.length > 0)
       .sort((left, right) => {
         const leftSource = left.sources[0];
         const rightSource = right.sources[0];
@@ -1422,9 +2204,7 @@ export async function buildDataset() {
       )
     )
   );
-  const itemsById = Object.fromEntries(
-    Object.entries(catalogs.itemsById).filter(([itemId]) => usedItemIds.has(itemId))
-  ) as Dataset["itemsById"];
+  const itemsById = buildUsedItemsById(usedItemIds, catalogs);
 
   const dataset = datasetSchema.parse({
     meta: {
@@ -1432,7 +2212,7 @@ export async function buildDataset() {
       set: CURRENT_SET,
       generatedAt: new Date().toISOString(),
       source: {
-        comps: "provider-separated tftacademy + mobalytics + tftactics + tftflow + metatft",
+        comps: "provider-separated tftacademy + mobalytics + tftactics + tftflow with zero-augment builds rejected",
         champions: "communitydragon-latest-cdragon-tft",
         augmentRanks: "mobalytics-stats-tier + communitydragon-augment-catalog"
       }
@@ -1444,7 +2224,13 @@ export async function buildDataset() {
     itemsById
   });
 
-  await downloadAssets(catalogs.assetDownloads);
+  const referencedAssetPaths = new Set([
+    ...Object.values(dataset.championsById).map((entry) => entry.icon),
+    ...Object.values(dataset.augmentsById).map((entry) => entry.icon),
+    ...Object.values(dataset.synergiesById).map((entry) => entry.icon),
+    ...Object.values(dataset.itemsById).map((entry) => entry.icon)
+  ]);
+  await downloadAssets(catalogs.assetDownloads.filter((download) => referencedAssetPaths.has(download.webPath)));
   return dataset;
 }
 
@@ -1468,10 +2254,28 @@ export function validateDataset(dataset: Dataset) {
           problems.push(`${comp.title} references missing synergy ${synergyId}.`);
         }
       }
+      for (const slot of phase.boardSlots) {
+        for (const itemId of slot.itemIds) {
+          if (!checkedDataset.itemsById[itemId]) {
+            problems.push(`${comp.title} ${phaseKey} board references missing item ${itemId}.`);
+          }
+        }
+      }
     }
 
     if (!comp.guide.overview.length) {
       problems.push(`${comp.title} is missing overview guide content.`);
+    }
+
+    if (!comp.recommendedAugmentIds.length) {
+      problems.push(`${comp.title} has no recommended augments.`);
+    }
+
+    const teamPlannerPattern = new RegExp(`^02(?:[0-9a-f]{3}){10}TFTSet${checkedDataset.meta.set}$`, "i");
+    if (!comp.teamCode) {
+      problems.push(`${comp.title} is missing a team planner copy code.`);
+    } else if (!teamPlannerPattern.test(comp.teamCode)) {
+      problems.push(`${comp.title} has an invalid team planner copy code.`);
     }
 
     for (const augmentId of comp.recommendedAugmentIds) {
@@ -1484,12 +2288,16 @@ export function validateDataset(dataset: Dataset) {
   const assetGroups = [
     ...Object.values(checkedDataset.championsById),
     ...Object.values(checkedDataset.augmentsById),
-    ...Object.values(checkedDataset.synergiesById)
+    ...Object.values(checkedDataset.synergiesById),
+    ...Object.values(checkedDataset.itemsById)
   ];
 
   for (const asset of assetGroups) {
     if (asset.icon.startsWith("http")) {
       problems.push(`Remote asset URL found in runtime dataset: ${asset.icon}`);
+    }
+    if (asset.icon.endsWith("/missingno.png") || asset.icon === "assets/items/missingno.png") {
+      problems.push(`${asset.id} still uses the missing item placeholder icon.`);
     }
   }
 

@@ -16,7 +16,8 @@
     "data:scrape-live": "tsx scripts/scrape-mobalytics.ts",
     "icons:generate": "node scripts/generate-icon.mjs",
     "electron:dev": "electron .",
-    "electron:build": "npm run build && electron-builder --win nsis",
+    "electron:build": "npm run build && electron-builder --win portable",
+    "electron:build:installer": "npm run build && electron-builder --win nsis",
     "prepare": "husky"
   },
   "dependencies": {
@@ -79,6 +80,10 @@
       "target": [
         {
           "target": "nsis",
+          "arch": "x64"
+        },
+        {
+          "target": "portable",
           "arch": "x64"
         }
       ],
