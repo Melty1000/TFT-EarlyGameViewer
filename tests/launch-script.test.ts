@@ -20,14 +20,14 @@ describe("portable launch script", () => {
   });
 
   it("keeps the double-click Windows launcher visible through fresh installs", () => {
-    const launcher = read("Launch TFT Early Game Viewer.cmd");
+    const launcher = read("Launch opnr.gg.cmd");
 
     expect(launcher).toContain("set \"ROOT=%~dp0\"");
     expect(launcher).toContain("call npm run launch");
     expect(launcher).toContain("This window must stay open");
     expect(launcher).toContain("AddMinutes(5)");
     expect(launcher).toContain("pause");
-    expect(launcher).not.toContain("start \"TFT Early Game Viewer Dev Server\"");
+    expect(launcher).not.toContain("start \"opnr.gg Dev Server\"");
     expect(launcher).not.toContain("AddSeconds(30)");
     expect(launcher).not.toMatch(/D:\\|C:\\|HYPNO|Codex-CLI/);
   });

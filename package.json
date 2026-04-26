@@ -1,7 +1,7 @@
 {
-  "name": "tft-early-game-viewer",
+  "name": "opnr-gg",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -14,6 +14,7 @@
     "data:sync": "tsx scripts/data-sync.ts",
     "data:validate": "tsx scripts/data-validate.ts",
     "data:scrape-live": "tsx scripts/scrape-mobalytics.ts",
+    "icons:generate": "node scripts/generate-icon.mjs",
     "electron:dev": "electron .",
     "electron:build": "npm run build && electron-builder --win portable",
     "prepare": "husky"
@@ -36,6 +37,8 @@
     "husky": "^9.1.7",
     "jsdom": "^26.0.0",
     "playwright": "^1.51.1",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5",
     "tsx": "^4.19.3",
     "typescript": "^5.7.3",
     "vite": "^6.2.1",
@@ -43,8 +46,8 @@
     "vitest": "^3.0.7"
   },
   "build": {
-    "appId": "com.melty.tft-early-game-viewer",
-    "productName": "TFT Early Game Viewer",
+    "appId": "gg.opnr.viewer",
+    "productName": "opnr.gg",
     "files": [
       "dist/**/*",
       "electron/**/*",
@@ -53,23 +56,37 @@
       "!**/LICENSE*",
       "!**/CHANGELOG*"
     ],
+    "extraResources": [
+      {
+        "from": "build/icon.ico",
+        "to": "build/icon.ico"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "build/icon.png"
+      }
+    ],
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "compression": "maximum",
-    "electronLanguages": ["en-US"],
+    "electronLanguages": [
+      "en-US"
+    ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "portable",
           "arch": "x64"
         }
       ],
-      "artifactName": "TFT-Early-Game-Viewer-${version}-portable.exe",
+      "artifactName": "opnr-gg-${version}-portable.exe",
       "signAndEditExecutable": false
     },
     "portable": {
-      "artifactName": "TFT-Early-Game-Viewer-${version}-portable.exe"
+      "artifactName": "opnr-gg-${version}-portable.exe"
     },
     "asar": true
   }

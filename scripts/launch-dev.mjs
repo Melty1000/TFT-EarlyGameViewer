@@ -93,5 +93,5 @@ if (args.install && !hasInstalledDependencies()) {
   run(npmCommand, ["install"]);
 }
 
-console.log(`Launching TFT Early Game Viewer at http://${host}:${port}/`);
+console.log(`Launching opnr.gg at http://${host}:${port}/`);
 run(npmCommand, ["run", "dev", "--", "--host", host, "--port", String(port), "--strictPort"]);

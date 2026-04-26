@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 declare global {
   interface Window {
-    meltyShell?: {
+    opnrShell?: {
       minimize: () => Promise<void>;
       toggleMaximize: () => Promise<void>;
       close: () => Promise<void>;
@@ -13,7 +13,7 @@ declare global {
 }
 
 export function TitleBar() {
-  const shell = typeof window !== "undefined" ? window.meltyShell : undefined;
+  const shell = typeof window !== "undefined" ? window.opnrShell : undefined;
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
@@ -33,12 +33,7 @@ export function TitleBar() {
 
   return (
     <div className="titlebar">
-      <div className="titlebar-drag">
-        <span className="titlebar-brand">
-          TFT <span className="accent">SET 17</span>
-          <span className="titlebar-brand-sub">Early Game Viewer</span>
-        </span>
-      </div>
+      <div className="titlebar-drag" />
       <div className="titlebar-controls">
         <button
           type="button"

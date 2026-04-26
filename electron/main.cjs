@@ -1,5 +1,18 @@
 const { app, BrowserWindow, ipcMain, shell } = require("electron");
 const path = require("node:path");
+const fs = require("node:fs");
+
+const PROJECT_ROOT = path.join(__dirname, "..");
+const ICON_CANDIDATES = [
+  path.join(process.resourcesPath || "", "build", "icon.ico"),
+  path.join(PROJECT_ROOT, "build", "icon.ico"),
+  path.join(PROJECT_ROOT, "build", "icon.png")
+];
+const APP_ICON = ICON_CANDIDATES.find((candidate) => candidate && fs.existsSync(candidate));
+
+if (process.platform === "win32") {
+  app.setAppUserModelId("gg.opnr.viewer");
+}
 
 let mainWindow = null;
 
@@ -9,10 +22,11 @@ function createWindow() {
     height: 900,
     minWidth: 1024,
     minHeight: 640,
-    backgroundColor: "#050507",
+    backgroundColor: "#0B0F1A",
     frame: false,
     titleBarStyle: "hidden",
     show: false,
+    icon: APP_ICON || undefined,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,

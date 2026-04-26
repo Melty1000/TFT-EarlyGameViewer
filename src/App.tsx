@@ -82,11 +82,11 @@ export default function App() {
     <main className="app-shell">
       <TitleBar />
       <header className="topbar">
-        <div className="topbar-left">
+        <div className="topbar-brand">
+          <img src={`${import.meta.env.BASE_URL}opnrgg.svg`} alt="" className="topbar-logo" aria-hidden="true" />
           <h1 className="site-title">
-            TFT <span className="accent">SET 17</span>
+            opnr<span className="accent">.gg</span>
           </h1>
-          <span className="topbar-subtitle">Early Game Viewer</span>
         </div>
 
         <div className="topbar-center">

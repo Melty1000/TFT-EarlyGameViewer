@@ -1,4 +1,4 @@
-# TFT Early Game Viewer
+# opnr.gg
 
 Desktop-first TFT comp browser rebuilt with React, TypeScript, and Vite, backed by a normalized local dataset.
 
