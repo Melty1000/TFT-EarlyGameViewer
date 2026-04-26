@@ -1,5 +1,28 @@
 import type { Comp } from "../../shared/tft";
 
+function getSourceAbbreviation(source: string) {
+  const normalized = source.toLowerCase();
+
+  if (normalized.includes("mobalytics")) {
+    return "MOB";
+  }
+
+  if (normalized.includes("academy")) {
+    return "ACD";
+  }
+
+  if (normalized.includes("tactics")) {
+    return "TAC";
+  }
+
+  return source
+    .split(/[\s_-]+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 3)
+    .toUpperCase();
+}
+
 export function getCompPlaystyle(comp: Comp): string | null {
   return (
     comp.guide.overview
@@ -16,6 +39,7 @@ export function getCompRankTags(comp: Comp) {
     .map((source) => ({
       key: `${source.name}-${source.tier}`,
       label: `${source.name} ${source.tier}`,
+      shortLabel: `${getSourceAbbreviation(source.name)} ${source.tier?.trim().toUpperCase()}`,
       source: source.name,
       tier: source.tier?.trim().toUpperCase() ?? ""
     }));

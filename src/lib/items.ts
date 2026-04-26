@@ -27,7 +27,7 @@ export function getItemRecipeIds(itemId: string): [string, string] | null {
 
 export function getItemDisplay(dataset: Dataset, itemId: string): ItemDisplay {
   const item = dataset.itemsById?.[itemId];
-  const recipeIds = getItemRecipeIds(itemId) ?? [];
+  const recipeIds = (getItemRecipeIds(itemId) ?? []).slice(0, 2);
 
   return {
     id: itemId,

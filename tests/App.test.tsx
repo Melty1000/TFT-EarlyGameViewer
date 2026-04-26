@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App";
@@ -93,7 +93,7 @@ describe("App", () => {
     render(<App />);
 
     const row = await ensureExpanded(user, compWithAugment.title);
-    await user.click(within(row).getByRole("button", { name: `Filter by augment ${augment.name}` }));
+    fireEvent.contextMenu(within(row).getByRole("button", { name: `Inspect augment ${augment.name}` }));
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: `Toggle comp ${compWithAugment.title}` })).toBeInTheDocument();
@@ -216,5 +216,60 @@ describe("App", () => {
 
     await user.hover(within(row).getAllByRole("button", { name: `Inspect item ${item.name}` })[0]);
     expect(await within(row).findByText("Recipe")).toBeInTheDocument();
+    expect(within(row).getAllByLabelText(/^Recipe component /)).toHaveLength(2);
+  });
+
+  it("uses left click for inspector pins and right click for filter chips", async () => {
+    const user = userEvent.setup();
+    const compWithAugment = dataset.comps.find((comp) =>
+      comp.recommendedAugmentIds.some((augmentId) => {
+        const matches = dataset.comps.filter((candidate) => candidate.recommendedAugmentIds.includes(augmentId));
+        return matches.length > 0 && matches.length < dataset.comps.length;
+      })
+    );
+
+    expect(compWithAugment).toBeDefined();
+    if (!compWithAugment) {
+      return;
+    }
+
+    const augmentId = compWithAugment.recommendedAugmentIds.find((candidateAugmentId) => {
+      const matches = dataset.comps.filter((candidate) => candidate.recommendedAugmentIds.includes(candidateAugmentId));
+      return matches.length > 0 && matches.length < dataset.comps.length;
+    });
+
+    expect(augmentId).toBeDefined();
+    if (!augmentId) {
+      return;
+    }
+
+    const augment = dataset.augmentsById[augmentId];
+    const compWithoutAugment = dataset.comps.find((comp) => !comp.recommendedAugmentIds.includes(augmentId));
+
+    expect(augment).toBeDefined();
+    expect(compWithoutAugment).toBeDefined();
+    if (!augment || !compWithoutAugment) {
+      return;
+    }
+
+    render(<App />);
+
+    let row = await ensureExpanded(user, compWithAugment.title);
+    const augmentButton = within(row).getByRole("button", { name: `Inspect augment ${augment.name}` });
+
+    await user.click(augmentButton);
+
+    await waitFor(() => {
+      row = getCompRow(compWithAugment.title) as HTMLElement;
+      expect(within(row).getByTestId("inspector-title")).toHaveTextContent(augment.name);
+      expect(within(row).getByText("Pinned")).toBeInTheDocument();
+    });
+
+    fireEvent.contextMenu(within(row).getByRole("button", { name: `Inspect augment ${augment.name}` }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: `Toggle comp ${compWithAugment.title}` })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: `Toggle comp ${compWithoutAugment.title}` })).not.toBeInTheDocument();
+    });
   });
 });

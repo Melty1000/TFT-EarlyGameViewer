@@ -123,7 +123,7 @@ function buildInspectorModel(
     return {
       title: item.name,
       body: cleanGameText(item.description) || "No item description was captured.",
-      chips: ["Item"],
+      chips: [],
       icon: item.icon,
       accent: "Item",
       recipe: item.recipe
@@ -176,7 +176,13 @@ function renderChampionTile(
         type="button"
         className="board-slot-trigger"
         aria-label={`Inspect champion ${champion.name}`}
+        title={`${champion.name} - click to pin, right-click to filter`}
         onClick={() => onToggleLock({ kind: "champion", id: champion.id })}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onQuickFilter(champion.name);
+        }}
       >
         <div className="board-slot-shell">
           <div className="champ-frame">
@@ -206,18 +212,18 @@ function renderChampionTile(
                 key={`${itemId}-${index}`}
                 type="button"
                 className="board-item-icon"
-                title={`${item.name} — click to filter, right-click to pin`}
+                title={`${item.name} - click to pin, right-click to filter`}
                 aria-label={`Inspect item ${item.name}`}
                 onMouseEnter={() => onHoverItem(itemId)}
                 onMouseLeave={() => onHoverItem(null)}
                 onClick={(event) => {
                   event.stopPropagation();
-                  onQuickFilter(item.name);
+                  onToggleLock({ kind: "item", id: itemId });
                 }}
                 onContextMenu={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
-                  onToggleLock({ kind: "item", id: itemId });
+                  onQuickFilter(item.name);
                 }}
               >
                 <img src={item.icon} alt={item.name} />
@@ -244,7 +250,7 @@ function renderAugment(
     <div
       key={augment.id}
       className={`augment-card named-card tier-${augment.tier.toLowerCase()}`}
-      title={augment.name}
+      title={`${augment.name} - click to pin, right-click to filter`}
       onMouseEnter={() => onHoverAugment(augment.id)}
       onMouseLeave={() => onHoverAugment(null)}
     >
@@ -253,23 +259,17 @@ function renderAugment(
         className="augment-main-action"
         aria-label={`Inspect augment ${augment.name}`}
         onClick={() => onToggleLock({ kind: "augment", id: augment.id })}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onQuickFilter(augment.name);
+        }}
       >
         <img src={augment.icon} alt={augment.name} className="augment-icon" />
         <div className="augment-copy">
           <span className="augment-name">{augment.name}</span>
           <span className="augment-rank">{augment.tier}</span>
         </div>
-      </button>
-      <button
-        type="button"
-        className="augment-filter-action"
-        aria-label={`Filter by augment ${augment.name}`}
-        title={`Filter by ${augment.name}`}
-        onClick={() => onQuickFilter(augment.name)}
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-          <path d="M3 5h18l-7 8v5l-4 2v-7L3 5Z" />
-        </svg>
       </button>
     </div>
   );
@@ -576,13 +576,15 @@ export function DetailPane({
               </div>
             </div>
             <div className="inspector-content">
-              <div className="mini-chip-row wrap">
-                {activeInspector.chips.map((chip) => (
-                  <span key={chip} className="mini-chip muted">
-                    {chip}
-                  </span>
-                ))}
-              </div>
+              {activeInspector.chips.length > 0 ? (
+                <div className="mini-chip-row wrap">
+                  {activeInspector.chips.map((chip) => (
+                    <span key={chip} className="mini-chip muted">
+                      {chip}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
               {activeInspector.unlockCondition ? (
                 <div className="unlock-callout">
                   <img src={`${import.meta.env.BASE_URL}assets/system/lock.svg`} alt="" className="unlock-callout-icon" />
@@ -610,10 +612,12 @@ export function DetailPane({
                   <h5>Recipe</h5>
                   <div className="recipe-row">
                     {activeInspector.recipe.map((component, index) => (
-                      <div key={component.id} className="recipe-component">
-                        {index > 0 ? <span className="recipe-plus">+</span> : null}
-                        <img src={component.icon} alt={component.name} className="recipe-icon" />
-                        <span>{component.name}</span>
+                      <div key={`${component.id}-${index}`} className="recipe-component-wrap">
+                        {index > 0 ? <span className="recipe-plus" aria-hidden="true">+</span> : null}
+                        <span className="recipe-component" aria-label={`Recipe component ${component.name}`}>
+                          <img src={component.icon} alt={component.name} className="recipe-icon" />
+                          <span>{component.name}</span>
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -633,7 +637,7 @@ export function DetailPane({
         <div className="detail-card detail-card-inline">
           <div className="section-header">
             <h3>Synergies</h3>
-            <p>Hover for info · click to filter · right-click to pin</p>
+            <p>Hover for info - click to pin - right-click to filter</p>
           </div>
           <div className="token-grid icon-grid support-token-grid">
             {phase.synergyIds.map((synergyId) => {
@@ -644,14 +648,15 @@ export function DetailPane({
                   key={synergyId}
                   type="button"
                   className="token-button synergy-card"
-                  title={`${displayName} — click to filter, right-click to pin`}
-                  aria-label={`Filter by ${displayName}; right-click to pin`}
+                  title={`${displayName} - click to pin, right-click to filter`}
+                  aria-label={`Inspect synergy ${displayName}`}
                   onMouseEnter={() => onHoverSynergy(synergyId)}
                   onMouseLeave={() => onHoverSynergy(null)}
-                  onClick={() => onQuickFilter(displayName)}
+                  onClick={() => onToggleLock({ kind: "synergy", id: synergyId })}
                   onContextMenu={(event) => {
                     event.preventDefault();
-                    onToggleLock({ kind: "synergy", id: synergyId });
+                    event.stopPropagation();
+                    onQuickFilter(displayName);
                   }}
                 >
                   <img src={synergy?.icon} alt={displayName} className="token-icon" />
@@ -666,7 +671,7 @@ export function DetailPane({
         <div className="detail-card detail-card-inline">
           <div className="section-header">
             <h3>Recommended augments</h3>
-            <p>Click card to pin · click filter icon to filter</p>
+            <p>Hover for info - click to pin - right-click to filter</p>
           </div>
           <div className="augment-grid icon-grid support-augment-grid">
             {comp.recommendedAugmentIds.map((augmentId) =>
