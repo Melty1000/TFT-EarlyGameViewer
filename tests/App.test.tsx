@@ -207,7 +207,7 @@ describe("App", () => {
 
     const row = await ensureExpanded(user, comp.title);
 
-    expect(within(row).getAllByText(`${rankedSource.name} ${rankedSource.tier}`)[0]).toBeInTheDocument();
+    expect(within(row).getAllByLabelText(`Build rank ${rankedSource.name} ${rankedSource.tier}`)[0]).toBeInTheDocument();
     expect(within(row).getAllByText(style)[0]).toBeInTheDocument();
 
     await user.hover(within(row).getAllByRole("button", { name: `Inspect champion ${champion.name}` })[0]);

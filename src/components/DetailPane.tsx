@@ -476,8 +476,16 @@ export function DetailPane({
           <div className="expanded-build-meta">
             {playstyle ? <span className="style-chip large">{playstyle}</span> : null}
             {rankTags.slice(0, 4).map((rank) => (
-              <span key={rank.key} className={`rank-chip rank-${rank.tier.toLowerCase()}`}>
-                {rank.label}
+              <span
+                key={rank.key}
+                className={`rank-chip rank-${rank.tier.toLowerCase()}`}
+                title={rank.label}
+                aria-label={`Build rank ${rank.label}`}
+              >
+                <span className="rank-emblem" aria-hidden="true">
+                  {rank.tier}
+                </span>
+                <span className="rank-source">{rank.sourceShort}</span>
               </span>
             ))}
           </div>

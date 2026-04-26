@@ -15,6 +15,14 @@ function getSourceAbbreviation(source: string) {
     return "TAC";
   }
 
+  if (normalized.includes("flow")) {
+    return "FLW";
+  }
+
+  if (normalized.includes("meta")) {
+    return "MTF";
+  }
+
   return source
     .split(/[\s_-]+/)
     .map((part) => part[0])
@@ -39,6 +47,7 @@ export function getCompRankTags(comp: Comp) {
     .map((source) => ({
       key: `${source.name}-${source.tier}`,
       label: `${source.name} ${source.tier}`,
+      sourceShort: getSourceAbbreviation(source.name),
       shortLabel: `${getSourceAbbreviation(source.name)} ${source.tier?.trim().toUpperCase()}`,
       source: source.name,
       tier: source.tier?.trim().toUpperCase() ?? ""

@@ -59,13 +59,45 @@ type SourceComp = {
   updatedAt?: string;
 };
 
-type SourceRef = {
-  name: SourceName;
-  url: string;
-  externalId?: string;
-  tier?: string;
-  confidence?: number;
-};
+function sourceDisplayName(source: SourceName) {
+  switch (source) {
+    case "mobalytics":
+      return "Mobalytics";
+    case "tftacademy":
+      return "TFT Academy";
+    case "tftactics":
+      return "TFTactics";
+    case "tftflow":
+      return "TFTFlow";
+    case "metatft":
+      return "MetaTFT";
+  }
+}
+
+function sourceTierOrder(tier?: string) {
+  const normalized = tier?.trim().toUpperCase() ?? "";
+  if (normalized.startsWith("S") || normalized === "OP") {
+    return 0;
+  }
+  if (normalized.startsWith("A")) {
+    return 1;
+  }
+  if (normalized.startsWith("B")) {
+    return 2;
+  }
+  if (normalized.startsWith("C")) {
+    return 3;
+  }
+  if (normalized.startsWith("D")) {
+    return 4;
+  }
+  return 5;
+}
+
+function sourceOrder(source: SourceName) {
+  const index = (["mobalytics", "tftacademy", "tftactics", "tftflow", "metatft"] as SourceName[]).indexOf(source);
+  return index === -1 ? 99 : index;
+}
 
 type CDragonChampion = {
   apiName?: string;
@@ -1013,87 +1045,6 @@ async function loadMetaTftSourceComps() {
   });
 }
 
-function unitSet(comp: SourceComp) {
-  return new Set((comp.finalUnits?.length ? comp.finalUnits : comp.units).map((unit) => unit.championId));
-}
-
-function tokenSet(value: string) {
-  return new Set(normalizeId(value).split("-").filter((token) => token.length > 2));
-}
-
-function overlapScore(left: SourceComp, right: SourceComp) {
-  const leftUnits = unitSet(left);
-  const rightUnits = unitSet(right);
-  const intersection = [...leftUnits].filter((unitId) => rightUnits.has(unitId)).length;
-  const union = new Set([...leftUnits, ...rightUnits]).size || 1;
-  const unitScore = intersection / union;
-
-  const leftTokens = tokenSet(left.title);
-  const rightTokens = tokenSet(right.title);
-  const tokenIntersection = [...leftTokens].filter((token) => rightTokens.has(token)).length;
-  const tokenUnion = new Set([...leftTokens, ...rightTokens]).size || 1;
-  const titleScore = tokenIntersection / tokenUnion;
-
-  if (leftUnits.size === 0 || rightUnits.size === 0) {
-    return titleScore;
-  }
-
-  return unitScore * 0.75 + titleScore * 0.25;
-}
-
-function mergeSourceComps(primarySources: SourceComp[], supportingSources: SourceComp[]) {
-  const canonical: Array<{ base: SourceComp; sources: SourceRef[]; contributors: SourceComp[] }> = [];
-
-  for (const comp of primarySources) {
-    const best = canonical
-      .map((entry) => ({ entry, score: overlapScore(entry.base, comp) }))
-      .sort((left, right) => right.score - left.score)[0];
-
-    if (best && best.score >= 0.62) {
-      best.entry.sources.push({
-        name: comp.source,
-        url: comp.url,
-        externalId: comp.externalId,
-        tier: comp.tier,
-        confidence: Number(best.score.toFixed(3))
-      });
-      best.entry.contributors.push(comp);
-    } else {
-      canonical.push({
-        base: comp,
-        sources: [
-          {
-            name: comp.source,
-            url: comp.url,
-            externalId: comp.externalId,
-            tier: comp.tier,
-            confidence: 1
-          }
-        ],
-        contributors: [comp]
-      });
-    }
-  }
-
-  for (const comp of supportingSources) {
-    const best = canonical
-      .map((entry) => ({ entry, score: overlapScore(entry.base, comp) }))
-      .sort((left, right) => right.score - left.score)[0];
-    if (best && best.score >= 0.42) {
-      best.entry.sources.push({
-        name: comp.source,
-        url: comp.url,
-        externalId: comp.externalId,
-        tier: comp.tier,
-        confidence: Number(best.score.toFixed(3))
-      });
-      best.entry.contributors.push(comp);
-    }
-  }
-
-  return canonical;
-}
-
 function isFrontlineChampion(championId: string, catalogs: Pick<Catalogs, "championsById" | "championRoles">) {
   const role = catalogs.championRoles[championId]?.toLowerCase() ?? "";
   const traits = catalogs.championsById[championId]?.traitIds ?? [];
@@ -1282,7 +1233,7 @@ function buildGuide(comp: SourceComp, contributors: SourceComp[], catalogs: Pick
   const allTips = contributors.flatMap((source) => source.tips ?? []);
   const mainChampion = comp.mainChampionId ? catalogs.championsById[comp.mainChampionId]?.name : null;
   const mainItem = comp.mainItemId ? catalogs.itemNameById[comp.mainItemId] : null;
-  const sourceNames = Array.from(new Set(contributors.map((source) => source.source))).join(", ");
+  const sourceName = sourceDisplayName(comp.source);
 
   const overview = [
     {
@@ -1291,7 +1242,7 @@ function buildGuide(comp: SourceComp, contributors: SourceComp[], catalogs: Pick
         `${comp.title}${comp.tier ? ` is listed around ${comp.tier}-tier` : ""}${comp.playstyle ? ` as ${comp.playstyle}` : ""}.`,
         mainChampion ? `Primary unit: ${mainChampion}.` : null,
         mainItem ? `Key item or condition: ${mainItem}.` : null,
-        `Sources merged: ${sourceNames}.`
+        `Source: ${sourceName}.`
       ])
     },
     {
@@ -1337,7 +1288,7 @@ function buildGuide(comp: SourceComp, contributors: SourceComp[], catalogs: Pick
           lines: compactLines([
             ...lateLines,
             comp.augmentsTip || null,
-            "Use source overlap as confidence: comps with more sources are less likely to be single-site noise."
+            `Use this as the ${sourceName} published line, not a merged consensus build.`
           ])
         }
       ]
@@ -1369,59 +1320,42 @@ function buildComponentDemand(rawLateBoard: SourceUnit[], catalogs: Pick<Catalog
     .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
 }
 
-function dedupeSourceRefs(sources: SourceRef[]) {
-  const bestBySource = new Map<SourceName, SourceRef>();
-  for (const source of sources) {
-    const current = bestBySource.get(source.name);
-    if (!current || (source.confidence ?? 0) > (current.confidence ?? 0)) {
-      bestBySource.set(source.name, source);
-    }
-  }
-  return [...bestBySource.values()].sort((left, right) => left.name.localeCompare(right.name));
-}
-
-function buildCompFromMergedEntry(
-  entry: ReturnType<typeof mergeSourceComps>[number],
-  catalogs: Catalogs
-): Comp {
-  const base = entry.base;
-  const sourceRefs = dedupeSourceRefs(entry.sources);
-  const contributorsByPriority = [base, ...entry.contributors.filter((source) => source !== base)];
-  const finalUnits =
-    contributorsByPriority.find((source) => source.finalUnits?.length)?.finalUnits ??
-    contributorsByPriority.find((source) => source.units.length)?.units ??
-    [];
-  const earlyUnits =
-    contributorsByPriority.find((source) => source.earlyUnits?.length)?.earlyUnits ??
-    fallbackEarlyUnits(finalUnits, catalogs);
+function buildCompFromSourceComp(comp: SourceComp, catalogs: Catalogs): Comp {
+  const finalUnits = comp.finalUnits?.length ? comp.finalUnits : comp.units;
+  const earlyUnits = comp.earlyUnits?.length ? comp.earlyUnits : fallbackEarlyUnits(finalUnits, catalogs);
   const midUnits = fallbackMidUnits(earlyUnits, finalUnits, catalogs);
-
+  const providerName = sourceDisplayName(comp.source);
   const augmentIds = Array.from(
     new Set(
-      contributorsByPriority
-        .flatMap((source) => source.augments ?? [])
+      (comp.augments ?? [])
         .map((augment) => sourceAugmentId(augment, catalogs))
-        .filter(Boolean)
+        .filter((augmentId): augmentId is string => Boolean(augmentId))
     )
   ).slice(0, 9);
 
-  const idBase = normalizeId(base.title) || normalizeId(base.externalId);
-  const teamCode = contributorsByPriority.find((source) => source.teamCode)?.teamCode;
   return {
-    id: idBase,
-    title: base.title,
-    sourceUrl: base.url,
-    sources: sourceRefs,
+    id: normalizeId(`${comp.source}-${comp.externalId || comp.title}`),
+    title: `${comp.title} (${providerName})`,
+    sourceUrl: comp.url,
+    sources: [
+      {
+        name: comp.source,
+        url: comp.url,
+        externalId: comp.externalId,
+        tier: comp.tier,
+        confidence: 1
+      }
+    ],
     phases: {
       early: unitsToPhaseData(earlyUnits, catalogs),
       mid: unitsToPhaseData(midUnits, catalogs),
       late: unitsToPhaseData(finalUnits, catalogs)
     },
     recommendedAugmentIds: augmentIds,
-    guide: buildGuide(base, contributorsByPriority, catalogs),
+    guide: buildGuide(comp, [comp], catalogs),
     componentDemand: buildComponentDemand(finalUnits, catalogs),
-    notes: `Merged from ${sourceRefs.length} source${sourceRefs.length === 1 ? "" : "s"}.`,
-    teamCode
+    notes: `${providerName} provider build.`,
+    teamCode: comp.teamCode
   };
 }
 
@@ -1451,17 +1385,22 @@ export async function buildDataset() {
     loadMetaTftSourceComps()
   ]);
 
-  const merged = mergeSourceComps(
-    [...academyComps, ...mobalytics.comps].filter((comp) => comp.units.length >= 3),
-    [...tftacticsComps, ...tftflowComps, ...metatftComps].filter(
-      (comp) => comp.units.length >= 3 || comp.source === "tftflow"
-    )
+  const sourceComps = [...academyComps, ...mobalytics.comps, ...tftacticsComps, ...tftflowComps, ...metatftComps].filter(
+    (comp) => comp.units.length >= 3 || Boolean(comp.finalUnits?.length) || comp.source === "tftflow"
   );
   const comps = dedupeCompIds(
-    merged
-      .map((entry) => buildCompFromMergedEntry(entry, catalogs))
+    sourceComps
+      .map((comp) => buildCompFromSourceComp(comp, catalogs))
       .filter((comp) => comp.phases.late.championIds.length >= 3)
-      .sort((left, right) => right.sources.length - left.sources.length || left.title.localeCompare(right.title))
+      .sort((left, right) => {
+        const leftSource = left.sources[0];
+        const rightSource = right.sources[0];
+        return (
+          sourceTierOrder(leftSource?.tier) - sourceTierOrder(rightSource?.tier) ||
+          sourceOrder(leftSource?.name as SourceName) - sourceOrder(rightSource?.name as SourceName) ||
+          left.title.localeCompare(right.title)
+        );
+      })
   );
 
   const usedAugmentIds = new Set(comps.flatMap((comp) => comp.recommendedAugmentIds));
@@ -1493,7 +1432,7 @@ export async function buildDataset() {
       set: CURRENT_SET,
       generatedAt: new Date().toISOString(),
       source: {
-        comps: "tftacademy + mobalytics + tftactics + tftflow + metatft",
+        comps: "provider-separated tftacademy + mobalytics + tftactics + tftflow + metatft",
         champions: "communitydragon-latest-cdragon-tft",
         augmentRanks: "mobalytics-stats-tier + communitydragon-augment-catalog"
       }

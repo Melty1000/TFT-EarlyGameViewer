@@ -9,6 +9,14 @@ describe("dataset validation", () => {
     expect(validateDataset(dataset)).toEqual([]);
   });
 
+  it("keeps provider builds separate instead of merged", () => {
+    const dataset = datasetSchema.parse(generatedDataset);
+
+    expect(dataset.comps.some((comp) => comp.sources.length > 1)).toBe(false);
+    expect(dataset.comps.every((comp) => /\([^)]+\)$/.test(comp.title))).toBe(true);
+    expect(dataset.comps.some((comp) => comp.notes?.toLowerCase().includes("merged"))).toBe(false);
+  });
+
   it("flags missing champion references and remote assets", () => {
     const dataset = datasetSchema.parse(structuredClone(generatedDataset));
     dataset.comps[0].phases.late.championIds.push("missing-champion");

@@ -219,8 +219,16 @@ export function CompListPane({ comps, dataset, phaseFilter, onQuickFilter }: Com
                   <h2>{comp.title}</h2>
                   <div className="row-meta-line" aria-label={`${comp.title} ranks and strategy`}>
                     {rankTags.slice(0, 4).map((rank) => (
-                      <span key={rank.key} className={`rank-chip rank-${rank.tier.toLowerCase()}`} title={rank.label}>
-                        {rank.shortLabel}
+                      <span
+                        key={rank.key}
+                        className={`rank-chip rank-${rank.tier.toLowerCase()}`}
+                        title={rank.label}
+                        aria-label={`Build rank ${rank.label}`}
+                      >
+                        <span className="rank-emblem" aria-hidden="true">
+                          {rank.tier}
+                        </span>
+                        <span className="rank-source">{rank.sourceShort}</span>
                       </span>
                     ))}
                     {playstyle ? <span className="style-chip">{playstyle}</span> : null}
