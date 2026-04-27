@@ -7,6 +7,7 @@ function readPackageJson() {
     build: {
       win: {
         target: Array<{ target: string; arch: string | string[] }>;
+        requestedExecutionLevel?: string;
       };
       nsis?: Record<string, unknown>;
       portable?: Record<string, unknown>;
@@ -15,15 +16,15 @@ function readPackageJson() {
 }
 
 describe("Electron distribution config", () => {
-  it("ships the portable executable by default and keeps installer packaging explicit", () => {
+  it("ships only the portable executable by default without requesting elevation", () => {
     const packageJson = readPackageJson();
     const targets = packageJson.build.win.target.map((target) => target.target);
 
     expect(packageJson.scripts["electron:build"]).toContain("portable");
     expect(packageJson.scripts["electron:build"]).not.toContain("nsis");
-    expect(packageJson.scripts["electron:build:installer"]).toContain("nsis");
     expect(packageJson.scripts["electron:build"]).not.toContain("zip");
-    expect(targets).toEqual(["nsis", "portable"]);
+    expect(targets).toEqual(["portable"]);
+    expect(packageJson.build.win.requestedExecutionLevel).toBe("asInvoker");
     expect(packageJson.build.portable).toBeUndefined();
     expect(packageJson.build.nsis?.oneClick).toBe(false);
   });

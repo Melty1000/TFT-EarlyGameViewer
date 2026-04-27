@@ -10,11 +10,22 @@ const ICON_CANDIDATES = [
 ];
 const APP_ICON = ICON_CANDIDATES.find((candidate) => candidate && fs.existsSync(candidate));
 
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch("disable-gpu");
+app.commandLine.appendSwitch("disable-gpu-sandbox");
+app.commandLine.appendSwitch("in-process-gpu");
+
 if (process.platform === "win32") {
   app.setAppUserModelId("gg.opnr.viewer");
 }
 
 let mainWindow = null;
+
+function revealWindow(window) {
+  if (window && !window.isDestroyed() && !window.isVisible()) {
+    window.show();
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -35,7 +46,11 @@ function createWindow() {
     }
   });
 
-  mainWindow.once("ready-to-show", () => mainWindow.show());
+  mainWindow.once("ready-to-show", () => revealWindow(mainWindow));
+  mainWindow.webContents.once("did-finish-load", () => revealWindow(mainWindow));
+  mainWindow.webContents.once("did-fail-load", () => revealWindow(mainWindow));
+
+  setTimeout(() => revealWindow(mainWindow), 1500);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
