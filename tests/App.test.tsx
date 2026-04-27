@@ -4,9 +4,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App";
 import generatedDataset from "../src/data/tft-set17.json";
 import { getItemDisplay } from "../src/lib/items";
+import { rankCompsBySimilarity } from "../src/lib/similarity";
 import { COMPONENT_RECIPES } from "../shared/normalization";
 import { datasetSchema } from "../shared/tft";
-import { getCompPlaystyle, getCompRankTags, getPlaystyleLabel, getSourceAbbreviation } from "../src/lib/compMeta";
+import {
+  getCompPlaystyle,
+  getCompRankTags,
+  getPlaystyleLabel,
+  getSourceAbbreviation,
+  getSourceDisplayName
+} from "../src/lib/compMeta";
 
 const dataset = datasetSchema.parse(generatedDataset);
 
@@ -29,6 +36,18 @@ function getDisplayTitle(title: string) {
 
 function augmentTierOrder(tier: string) {
   return ["S", "A", "B", "C", "D", "Unknown"].indexOf(tier);
+}
+
+function getFirstBoardChampionId(phase: "early" | "mid" | "late") {
+  const championId = dataset.comps
+    .flatMap((comp) => comp.phases[phase].boardSlots.map((slot) => slot.championId))
+    .find((candidate): candidate is string => Boolean(candidate));
+
+  if (!championId) {
+    throw new Error(`Expected at least one ${phase} board champion`);
+  }
+
+  return championId;
 }
 
 async function ensureExpanded(user: ReturnType<typeof userEvent.setup>, title: string) {
@@ -507,6 +526,151 @@ describe("App", () => {
 
     expect(item.name).toMatch(/Emblem$/);
     expect(item.icon).toContain("assets/synergies/");
+  });
+
+  it("switches to a phase-scoped similarity finder and ranks selected champion matches", async () => {
+    const user = userEvent.setup();
+    const championId = getFirstBoardChampionId("early");
+    const champion = dataset.championsById[championId];
+    const expectedTop = rankCompsBySimilarity(
+      dataset.comps,
+      dataset,
+      {
+        championIds: [championId],
+        augmentIds: [],
+        itemIds: [],
+        componentIds: []
+      },
+      "early"
+    )[0].comp;
+
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Switch to similarity view" }));
+    expect(screen.getByRole("heading", { name: "Similarity finder" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: `Select champion ${champion.name}` }));
+
+    const results = await screen.findAllByTestId("similarity-result");
+
+    expect(results[0]).toHaveTextContent(getDisplayTitle(expectedTop.title));
+    expect(results[0]).toHaveTextContent("Champions");
+    expect(within(results[0]).getByAltText(champion.name)).toBeInTheDocument();
+  });
+
+  it("allows multiple similarity phase buttons to stay selected", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Switch to similarity view" }));
+    await user.click(screen.getByRole("button", { name: "Rank similarity by mid board" }));
+
+    expect(screen.getByRole("button", { name: "Rank similarity by early board" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "Rank similarity by mid board" })).toHaveClass("active");
+
+    await user.click(screen.getByRole("button", { name: "Rank similarity by early board" }));
+    expect(screen.getByRole("button", { name: "Rank similarity by early board" })).not.toHaveClass("active");
+    expect(screen.getByRole("button", { name: "Rank similarity by mid board" })).toHaveClass("active");
+
+    await user.click(screen.getByRole("button", { name: "Rank similarity by mid board" }));
+    expect(screen.getByRole("button", { name: "Rank similarity by mid board" })).toHaveClass("active");
+  });
+
+  it("can collapse the similarity picker sidebar", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Switch to similarity view" }));
+    const collapseButton = screen.getByRole("button", { name: "Collapse similarity picker" });
+    const shell = screen.getByLabelText("Similarity entity picker").closest(".similarity-shell");
+
+    expect(shell).not.toHaveClass("sidebar-collapsed");
+
+    await user.click(collapseButton);
+
+    expect(shell).toHaveClass("sidebar-collapsed");
+    expect(screen.getByRole("button", { name: "Expand similarity picker" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("hides selected sources in both comp and similarity views", async () => {
+    const user = userEvent.setup();
+    const sourceName = getSourceDisplayName(dataset.comps[0].sources[0]?.name ?? "");
+    const sourceComps = dataset.comps.filter(
+      (comp) => getSourceDisplayName(comp.sources[0]?.name ?? "") === sourceName
+    );
+    const visibleComp = dataset.comps.find((comp) => getSourceDisplayName(comp.sources[0]?.name ?? "") !== sourceName);
+
+    expect(sourceComps.length).toBeGreaterThan(0);
+    expect(visibleComp).toBeDefined();
+    if (!visibleComp) {
+      return;
+    }
+
+    render(<App />);
+
+    await screen.findByText("Composition");
+    await user.click(screen.getByRole("button", { name: `Hide source ${sourceName}` }));
+
+    expect(document.querySelector(`[data-comp-id="${sourceComps[0].id}"]`)).not.toBeInTheDocument();
+    expect(document.querySelector(`[data-comp-id="${visibleComp.id}"]`)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Switch to similarity view" }));
+    const championId = getFirstBoardChampionId("early");
+    const champion = dataset.championsById[championId];
+    await user.click(screen.getByRole("button", { name: `Select champion ${champion.name}` }));
+
+    await screen.findAllByTestId("similarity-result");
+    expect(document.querySelector(`[data-comp-id="${sourceComps[0].id}"]`)).not.toBeInTheDocument();
+    expect(document.querySelector(`[data-comp-id="${visibleComp.id}"]`)).toBeInTheDocument();
+  });
+
+  it("keeps sidebar selections image-first and allows duplicate component selection", async () => {
+    const user = userEvent.setup();
+    const champion = Object.values(dataset.championsById)[0];
+    const unknownAugment = Object.values(dataset.augmentsById).find((augment) => augment.tier === "Unknown");
+    const component = dataset.comps.flatMap((comp) => comp.componentDemand).find(Boolean);
+
+    expect(component).toBeDefined();
+    if (!component) {
+      return;
+    }
+
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Switch to similarity view" }));
+
+    const championButton = screen.getByRole("button", { name: `Select champion ${champion.name}` });
+    expect(within(championButton).queryByText(/\d+\s+cost/i)).not.toBeInTheDocument();
+
+    if (unknownAugment) {
+      const augmentButton = screen.getByRole("button", { name: `Select augment ${unknownAugment.name}` });
+      expect(within(augmentButton).queryByText("Unknown")).not.toBeInTheDocument();
+    }
+
+    const componentButton = screen.getByRole("button", { name: `Select component ${component.label}` });
+    await user.click(componentButton);
+    await user.click(componentButton);
+
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+    expect(within(componentButton).getByText("2")).toBeInTheDocument();
+  });
+
+  it("does not show non-playable champion catalog entries in the similarity sidebar", async () => {
+    const user = userEvent.setup();
+    const nonPlayableChampion = Object.values(dataset.championsById).find((champion) => champion.cost > 5);
+
+    expect(nonPlayableChampion).toBeDefined();
+    if (!nonPlayableChampion) {
+      return;
+    }
+
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Switch to similarity view" }));
+
+    expect(screen.queryByRole("button", { name: `Select champion ${nonPlayableChampion.name}` })).not.toBeInTheDocument();
   });
 
   it("surfaces build rank, playstyle, recommended items, and item recipes", async () => {
