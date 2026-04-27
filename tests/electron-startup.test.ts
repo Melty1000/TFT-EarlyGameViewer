@@ -5,13 +5,13 @@ describe("Electron startup visibility", () => {
   it("does not depend only on ready-to-show to reveal the frameless window", () => {
     const mainProcess = readFileSync("electron/main.cjs", "utf8");
 
-    expect(mainProcess).toContain("app.disableHardwareAcceleration()");
-    expect(mainProcess).toContain('app.commandLine.appendSwitch("disable-gpu")');
     expect(mainProcess).toContain('app.commandLine.appendSwitch("disable-gpu-sandbox")');
-    expect(mainProcess).toContain('app.commandLine.appendSwitch("in-process-gpu")');
+    expect(mainProcess).not.toContain("app.disableHardwareAcceleration()");
+    expect(mainProcess).not.toContain('app.commandLine.appendSwitch("disable-gpu")');
     expect(mainProcess).toContain('mainWindow.once("ready-to-show"');
     expect(mainProcess).toContain('mainWindow.webContents.once("did-finish-load"');
     expect(mainProcess).toContain('mainWindow.webContents.once("did-fail-load"');
-    expect(mainProcess).toContain("setTimeout(() => revealWindow(mainWindow), 1500)");
+    expect(mainProcess).toContain('sandbox: false');
+    expect(mainProcess).toContain('logRendererState("timeout-1500")');
   });
 });
