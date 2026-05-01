@@ -9,23 +9,15 @@ import {
   type MouseEvent,
   type PointerEvent
 } from "react";
+import {
+  PANEL_IDS,
+  getDefaultResizeAnchors,
+  type DraggablePanelId,
+  type PanelResizeAnchors as ResizeAnchors
+} from "../lib/panelRegistry";
 
-export type DraggablePanelId =
-  | "filters"
-  | "sources"
-  | "activeRead"
-  | "browser"
-  | "buildControls"
-  | "selectedOverview"
-  | "selectedBoard"
-  | "selectedSynergies"
-  | "selectedAugments"
-  | "selectedGamePlan"
-  | "selectedComponents"
-  | "selectedSimilarities"
-  | "selectedGuide"
-  | "inspector"
-  | "signals";
+export type { DraggablePanelId } from "../lib/panelRegistry";
+export { getDefaultResizeAnchors } from "../lib/panelRegistry";
 export type PanelOffset = { x: number; y: number };
 export type PanelLayoutEntry = PanelOffset & { width?: number; height?: number };
 export type PanelLayout = Record<DraggablePanelId, PanelLayoutEntry>;
@@ -39,40 +31,10 @@ const PANEL_CHROME_CONTROL_SELECTOR = [
   PANEL_COLLAPSE_BUTTON_SELECTOR,
   ".dot-test-resize-handle"
 ].join(", ");
-const PANEL_IDS: DraggablePanelId[] = [
-  "filters",
-  "sources",
-  "activeRead",
-  "browser",
-  "buildControls",
-  "selectedOverview",
-  "selectedBoard",
-  "selectedSynergies",
-  "selectedAugments",
-  "selectedGamePlan",
-  "selectedComponents",
-  "selectedSimilarities",
-  "selectedGuide",
-  "inspector",
-  "signals"
-];
-const DEFAULT_LAYOUT: PanelLayout = {
-  filters: { x: 0, y: 0 },
-  sources: { x: 0, y: 0 },
-  activeRead: { x: 0, y: 0 },
-  browser: { x: 0, y: 0 },
-  buildControls: { x: 0, y: 0 },
-  selectedOverview: { x: 0, y: 0 },
-  selectedBoard: { x: 0, y: 0 },
-  selectedSynergies: { x: 0, y: 0 },
-  selectedAugments: { x: 0, y: 0 },
-  selectedGamePlan: { x: 0, y: 0 },
-  selectedComponents: { x: 0, y: 0 },
-  selectedSimilarities: { x: 0, y: 0 },
-  selectedGuide: { x: 0, y: 0 },
-  inspector: { x: 0, y: 0 },
-  signals: { x: 0, y: 0 }
-};
+const DEFAULT_LAYOUT = PANEL_IDS.reduce<PanelLayout>((layout, id) => {
+  layout[id] = { x: 0, y: 0 };
+  return layout;
+}, {} as PanelLayout);
 
 type DragState = {
   id: DraggablePanelId;
@@ -112,11 +74,6 @@ type PanelRect = {
   bottom: number;
   width: number;
   height: number;
-};
-
-type ResizeAnchors = {
-  right: boolean;
-  bottom: boolean;
 };
 
 type PanelChromeHit = {
@@ -336,20 +293,6 @@ const MIN_PANEL_WIDTH = 210;
 const MIN_PANEL_HEIGHT = 132;
 const COLLAPSED_PANEL_HEIGHT = 38;
 const RECOVERY_VISIBLE_EDGE = 56;
-const DEFAULT_RIGHT_ANCHORED_IDS = new Set<DraggablePanelId>(["selectedOverview", "selectedBoard", "inspector"]);
-const DEFAULT_BOTTOM_ANCHORED_IDS = new Set<DraggablePanelId>([
-  "selectedAugments",
-  "selectedSimilarities",
-  "selectedGuide",
-  "inspector"
-]);
-
-export function getDefaultResizeAnchors(id: DraggablePanelId): ResizeAnchors {
-  return {
-    right: DEFAULT_RIGHT_ANCHORED_IDS.has(id),
-    bottom: DEFAULT_BOTTOM_ANCHORED_IDS.has(id)
-  };
-}
 
 function getPanelFromHandle(handle: HTMLElement) {
   return handle.closest<HTMLElement>("[data-panel-id]") ?? handle;

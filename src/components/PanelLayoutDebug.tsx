@@ -1,137 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-
-type CssBoxValue = number | "auto" | "50%";
-type DebugPanelId =
-  | "browser"
-  | "buildControls"
-  | "selectedOverview"
-  | "selectedBoard"
-  | "selectedSynergies"
-  | "selectedAugments"
-  | "selectedGamePlan"
-  | "selectedComponents"
-  | "selectedSimilarities"
-  | "selectedGuide"
-  | "inspector";
-
-type DebugBoxLayout = {
-  width: CssBoxValue;
-  height: CssBoxValue;
-  top: CssBoxValue;
-  left: CssBoxValue;
-  right: CssBoxValue;
-  bottom: CssBoxValue;
-};
+import {
+  DEFAULT_PANEL_DEBUG_LAYOUT,
+  PANEL_DEBUG_OPTIONS,
+  type PanelCssBoxValue as CssBoxValue,
+  type PanelDebugId as DebugPanelId,
+  type PanelDebugLayout as DebugBoxLayout
+} from "../lib/panelRegistry";
 
 const DEBUG_LAYOUT_STORAGE_KEY = "opnr:aptos-layout-debug:v1";
 const DEBUG_DEFAULT_LAYOUT_STORAGE_KEY = "opnr:aptos-layout-debug-default:v1";
 const DEBUG_FIELDS: Array<keyof DebugBoxLayout> = ["width", "height", "top", "left", "right", "bottom"];
 const MIN_BROWSER_LAYOUT = { width: 840, height: 340 };
-
-const DEBUG_PANEL_OPTIONS: Array<{ id: DebugPanelId; label: string }> = [
-  { id: "browser", label: "Build Browser" },
-  { id: "buildControls", label: "Build Controls" },
-  { id: "selectedOverview", label: "Overview" },
-  { id: "selectedBoard", label: "Board View" },
-  { id: "selectedSynergies", label: "Synergies" },
-  { id: "selectedAugments", label: "Augments" },
-  { id: "selectedGamePlan", label: "Game Plan" },
-  { id: "selectedComponents", label: "Components" },
-  { id: "selectedSimilarities", label: "Similarities" },
-  { id: "selectedGuide", label: "Levelling Guide" },
-  { id: "inspector", label: "Inspector" }
-];
-
-const DEFAULT_DEBUG_LAYOUT: Record<DebugPanelId, DebugBoxLayout> = {
-  browser: {
-    width: 900,
-    height: 374,
-    top: 72,
-    left: "50%",
-    right: "auto",
-    bottom: "auto"
-  },
-  buildControls: {
-    width: 292,
-    height: 306,
-    top: 64,
-    left: 22,
-    right: "auto",
-    bottom: "auto"
-  },
-  selectedOverview: {
-    width: 380,
-    height: 282,
-    top: 64,
-    left: "auto",
-    right: 22,
-    bottom: "auto"
-  },
-  selectedBoard: {
-    width: 340,
-    height: 232,
-    top: 250,
-    left: "auto",
-    right: 22,
-    bottom: "auto"
-  },
-  selectedSynergies: {
-    width: 292,
-    height: 242,
-    top: 390,
-    left: 22,
-    right: "auto",
-    bottom: "auto"
-  },
-  selectedAugments: {
-    width: 350,
-    height: 226,
-    top: "auto",
-    left: 650,
-    right: "auto",
-    bottom: 24
-  },
-  selectedGamePlan: {
-    width: 320,
-    height: 260,
-    top: 420,
-    left: 650,
-    right: "auto",
-    bottom: "auto"
-  },
-  selectedComponents: {
-    width: 300,
-    height: 226,
-    top: 420,
-    left: 330,
-    right: "auto",
-    bottom: "auto"
-  },
-  selectedSimilarities: {
-    width: 292,
-    height: 226,
-    top: "auto",
-    left: 22,
-    right: "auto",
-    bottom: 24
-  },
-  selectedGuide: {
-    width: 300,
-    height: 226,
-    top: "auto",
-    left: 330,
-    right: "auto",
-    bottom: 24
-  },
-  inspector: {
-    width: 320,
-    height: 250,
-    top: "auto",
-    left: "auto",
-    right: 22,
-    bottom: 24
-  }
-};
+const DEBUG_PANEL_OPTIONS = PANEL_DEBUG_OPTIONS;
+const DEFAULT_DEBUG_LAYOUT = DEFAULT_PANEL_DEBUG_LAYOUT;
 
 function isDebugPanelId(value: string): value is DebugPanelId {
   return DEBUG_PANEL_OPTIONS.some((option) => option.id === value);

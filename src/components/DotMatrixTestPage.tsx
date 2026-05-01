@@ -25,6 +25,7 @@ import {
 } from "../lib/compMeta";
 import { compMatchesFilters, type PhaseFilter } from "../lib/filters";
 import { rankCompsBySimilarity, type SimilaritySelection } from "../lib/similarity";
+import { PANEL_REGISTRY } from "../lib/panelRegistry";
 import { useDataset } from "../lib/useDataset";
 
 type Point = {
@@ -285,6 +286,7 @@ export function DotMatrixTestPage() {
   const activeInspector = selectedComp && data
     ? buildInspectorModel(selectedComp, data, selectedBuildPhase, lockedInspector ?? inspector)
     : null;
+  const browserPanel = PANEL_REGISTRY.browser;
 
   const addChip = (value: string) => {
     const normalized = value.trim().toLowerCase();
@@ -631,9 +633,9 @@ export function DotMatrixTestPage() {
 
   const browserPanelProps = draggablePanels.getPanelProps("browser");
   const { className: browserPanelStateClass, ...browserPanelRest } = browserPanelProps;
-  const browserDragHandle = draggablePanels.getDragSurfaceProps("browser", "build browser");
+  const browserDragHandle = draggablePanels.getDragSurfaceProps("browser", browserPanel.label);
   const browserCollapsed = draggablePanels.isPanelCollapsed("browser");
-  const browserResizeHandles = getPanelResizeHandles(draggablePanels, "browser", "build browser");
+  const browserResizeHandles = getPanelResizeHandles(draggablePanels, "browser", browserPanel.label);
 
   return (
     <main className={menuOpen ? "dot-test-shell is-menu-open" : "dot-test-shell"}>
@@ -691,7 +693,7 @@ export function DotMatrixTestPage() {
             {...browserDragHandle}
             className={`${browserDragHandle.className} aptos-panel-header dot-test-build-browser-drag-bar`}
           >
-            <span>04 / Build Browser</span>
+            <span>{browserPanel.title}</span>
             <span className="dot-test-panel-status">
               {data
                 ? similaritySelectionCount
@@ -704,7 +706,7 @@ export function DotMatrixTestPage() {
             <span className="dot-test-drag-label">[ Drag ]</span>
             <PanelCollapseButton
               collapsed={browserCollapsed}
-              label="build browser"
+              label={browserPanel.label}
               onClick={() => draggablePanels.togglePanelCollapsed("browser")}
             />
           </div>
@@ -753,7 +755,7 @@ export function DotMatrixTestPage() {
       </section>
 
       <section className="dot-test-detail-panels" aria-label="Selected build detail panels">
-        <DotTestDraggablePanel id="buildControls" label="build controls" title="00 / Build Controls" draggablePanels={draggablePanels}>
+        <DotTestDraggablePanel id="buildControls" draggablePanels={draggablePanels}>
           <BuildControlsPanel
             data={data}
             filteredCount={browserComps.length}
@@ -773,11 +775,11 @@ export function DotMatrixTestPage() {
           />
         </DotTestDraggablePanel>
 
-        <DotTestDraggablePanel id="selectedOverview" label="build overview" title="01 / Overview" draggablePanels={draggablePanels}>
+        <DotTestDraggablePanel id="selectedOverview" draggablePanels={draggablePanels}>
           <OverviewPanel selectedComp={selectedComp} copyState={copyState} onCopyTeamCode={copySelectedTeamCode} />
         </DotTestDraggablePanel>
 
-        <DotTestDraggablePanel id="selectedBoard" label="board view" title="02 / Board View" draggablePanels={draggablePanels}>
+        <DotTestDraggablePanel id="selectedBoard" draggablePanels={draggablePanels}>
           <BoardViewPanel
             selectedComp={selectedComp}
             dataset={data}
@@ -789,7 +791,7 @@ export function DotMatrixTestPage() {
           />
         </DotTestDraggablePanel>
 
-        <DotTestDraggablePanel id="selectedSynergies" label="synergies" title="03 / Synergies" draggablePanels={draggablePanels}>
+        <DotTestDraggablePanel id="selectedSynergies" draggablePanels={draggablePanels}>
           <SynergiesPanel
             selectedComp={selectedComp}
             dataset={data}
@@ -802,8 +804,6 @@ export function DotMatrixTestPage() {
 
         <DotTestDraggablePanel
           id="selectedAugments"
-          label="recommended augments"
-          title="04 / Recommended Augments"
           draggablePanels={draggablePanels}
         >
           <RecommendedAugmentsPanel
@@ -815,11 +815,11 @@ export function DotMatrixTestPage() {
           />
         </DotTestDraggablePanel>
 
-        <DotTestDraggablePanel id="selectedGamePlan" label="game plan" title="05 / Game Plan" draggablePanels={draggablePanels}>
+        <DotTestDraggablePanel id="selectedGamePlan" draggablePanels={draggablePanels}>
           <GamePlanPanel selectedComp={selectedComp} selectedBuildPhase={selectedBuildPhase} />
         </DotTestDraggablePanel>
 
-        <DotTestDraggablePanel id="selectedComponents" label="components" title="06 / Components" draggablePanels={draggablePanels}>
+        <DotTestDraggablePanel id="selectedComponents" draggablePanels={draggablePanels}>
           <ComponentsPanel
             selectedComp={selectedComp}
             dataset={data}
@@ -830,7 +830,7 @@ export function DotMatrixTestPage() {
           />
         </DotTestDraggablePanel>
 
-        <DotTestDraggablePanel id="selectedSimilarities" label="similarities" title="09 / Similarities" draggablePanels={draggablePanels}>
+        <DotTestDraggablePanel id="selectedSimilarities" draggablePanels={draggablePanels}>
           <SimilaritiesPanel
             dataset={data}
             selection={similaritySelection}
@@ -839,11 +839,11 @@ export function DotMatrixTestPage() {
           />
         </DotTestDraggablePanel>
 
-        <DotTestDraggablePanel id="selectedGuide" label="levelling guide" title="07 / Levelling Guide" draggablePanels={draggablePanels}>
+        <DotTestDraggablePanel id="selectedGuide" draggablePanels={draggablePanels}>
           <LevellingGuidePanel selectedComp={selectedComp} selectedBuildPhase={selectedBuildPhase} />
         </DotTestDraggablePanel>
 
-        <DotTestDraggablePanel id="inspector" label="inspector" title="08 / Inspector" draggablePanels={draggablePanels}>
+        <DotTestDraggablePanel id="inspector" draggablePanels={draggablePanels}>
           <InspectorPanel activeInspector={activeInspector} lockedInspector={lockedInspector} />
         </DotTestDraggablePanel>
       </section>
@@ -923,31 +923,34 @@ function DecodingMenuText({ label, delay = 0 }: { label: string; delay?: number 
 
 type DotTestDraggablePanelProps = {
   id: DraggablePanelId;
-  label: string;
-  title: string;
+  label?: string;
+  title?: string;
   draggablePanels: ReturnType<typeof useDraggablePanels>;
   children: ReactNode;
 };
 
 function DotTestDraggablePanel({ id, label, title, draggablePanels, children }: DotTestDraggablePanelProps) {
+  const panel = PANEL_REGISTRY[id];
+  const panelLabel = label ?? panel.label;
+  const panelTitle = title ?? panel.title;
   const panelProps = draggablePanels.getPanelProps(id);
   const { className: panelStateClass, ...panelRest } = panelProps;
-  const dragHandle = draggablePanels.getDragSurfaceProps(id, label);
+  const dragHandle = draggablePanels.getDragSurfaceProps(id, panelLabel);
   const collapsed = draggablePanels.isPanelCollapsed(id);
-  const resizeHandles = getPanelResizeHandles(draggablePanels, id, label);
+  const resizeHandles = getPanelResizeHandles(draggablePanels, id, panelLabel);
 
   return (
     <section
       className={`aptos-lab-panel dot-test-detail-panel dot-test-panel-${id} ${panelStateClass}`}
-      aria-label={title}
+      aria-label={panelTitle}
       {...panelRest}
     >
       <div {...dragHandle} className={`${dragHandle.className} aptos-panel-header dot-test-detail-drag-bar`}>
-        <span>{title}</span>
+        <span>{panelTitle}</span>
         <span className="dot-test-drag-label">[ Drag ]</span>
         <PanelCollapseButton
           collapsed={collapsed}
-          label={label}
+          label={panelLabel}
           onClick={() => draggablePanels.togglePanelCollapsed(id)}
         />
       </div>
