@@ -8,7 +8,6 @@ import {
   getCompRankTags,
   getPlaystyleIcon,
   getPlaystyleLabel,
-  getRankIcon,
   getSourceAbbreviation,
   getSourceDisplayName
 } from "../lib/compMeta";
@@ -20,6 +19,7 @@ import {
   type SimilaritySelection
 } from "../lib/similarity";
 import { DetailPane, type DetailTab, type InspectorTarget } from "./DetailPane";
+import { RankBadge } from "./RankBadge";
 
 type SimilarityViewProps = {
   comps: Comp[];
@@ -279,9 +279,7 @@ function SimilarityResultRow({
             <span className="source-code">{getSourceAbbreviation(sourceName)}</span>
           </span>
           {rank ? (
-            <span className={`rank-chip rank-${rank.tier.toLowerCase()}`} title={rank.label}>
-              <img src={getRankIcon(rank.tier)} alt="" className="rank-icon" aria-hidden="true" />
-            </span>
+            <RankBadge tier={rank.tier} label={rank.label} />
           ) : (
             <span className="rank-empty">--</span>
           )}

@@ -15,7 +15,7 @@
     "data:validate": "tsx scripts/data-validate.ts",
     "data:scrape-live": "tsx scripts/scrape-mobalytics.ts",
     "icons:generate": "node scripts/generate-icon.mjs",
-    "electron:dev": "electron .",
+    "electron:dev": "node scripts/electron-dev.mjs",
     "electron:build": "npm run build && electron-builder --win portable",
     "prepare": "husky"
   },

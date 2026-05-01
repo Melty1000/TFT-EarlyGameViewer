@@ -60,8 +60,10 @@ function createWindow() {
     height: 900,
     minWidth: 1024,
     minHeight: 640,
-    backgroundColor: "#0B0F1A",
+    backgroundColor: "#08090d",
     frame: false,
+    thickFrame: false,
+    roundedCorners: false,
     titleBarStyle: "hidden",
     show: false,
     icon: APP_ICON || undefined,
@@ -116,6 +118,13 @@ function createWindow() {
 
   mainWindow.on("maximize", () => mainWindow.webContents.send("window:maximized", true));
   mainWindow.on("unmaximize", () => mainWindow.webContents.send("window:maximized", false));
+
+  const devUrl = process.env.OPNR_DEV_URL;
+  if (devUrl) {
+    writeStartupLog(`loadURL ${devUrl}`);
+    mainWindow.loadURL(devUrl);
+    return;
+  }
 
   const indexHtml = path.join(__dirname, "..", "dist", "index.html");
   writeStartupLog(`loadFile ${indexHtml}`);

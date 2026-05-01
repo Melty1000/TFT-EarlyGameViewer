@@ -38,6 +38,31 @@ function augmentTierOrder(tier: string) {
   return ["S", "A", "B", "C", "D", "Unknown"].indexOf(tier);
 }
 
+function mockRect(element: Element | null, rect: Partial<DOMRect>) {
+  if (!element) {
+    throw new Error("Expected element for mocked layout rect");
+  }
+
+  const left = rect.left ?? 0;
+  const top = rect.top ?? 0;
+  const width = rect.width ?? Math.max((rect.right ?? left) - left, 0);
+  const height = rect.height ?? Math.max((rect.bottom ?? top) - top, 0);
+  const right = rect.right ?? left + width;
+  const bottom = rect.bottom ?? top + height;
+
+  vi.spyOn(element, "getBoundingClientRect").mockReturnValue({
+    x: left,
+    y: top,
+    left,
+    top,
+    right,
+    bottom,
+    width,
+    height,
+    toJSON: () => ({ left, top, right, bottom, width, height })
+  } as DOMRect);
+}
+
 function getFirstBoardChampionId(phase: "early" | "mid" | "late") {
   const championId = dataset.comps
     .flatMap((comp) => comp.phases[phase].boardSlots.map((slot) => slot.championId))
@@ -73,10 +98,209 @@ async function ensureExpanded(user: ReturnType<typeof userEvent.setup>, title: s
 
 describe("App", () => {
   beforeEach(() => {
+    localStorage.clear();
+    window.history.pushState({}, "", "/");
+    document.documentElement.removeAttribute("data-opnr-theme");
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(JSON.stringify(dataset), { status: 200 }))
     );
+  });
+
+  it("serves the main application shell with reactive dot chrome", () => {
+    window.history.pushState({}, "", "/");
+
+    render(<App />);
+
+    const canvas = screen.getByTestId("dot-test-canvas");
+    expect(canvas.tagName).toBe("CANVAS");
+    expect(canvas).toHaveAttribute("data-page", "dot-reactivity-test");
+    expect(canvas).toHaveAttribute("data-layer-count", "1");
+    expect(screen.getByRole("button", { name: /Open OPNR menu/i })).toBeInTheDocument();
+    expect(screen.getByText(/OPNR\.GG/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Toggle Aptos theme/i)).toBeInTheDocument();
+  });
+
+  it("toggles and persists the Aptos theme mode", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await screen.findByLabelText(/Toggle Aptos theme/i);
+
+    expect(document.documentElement).toHaveAttribute("data-opnr-theme", "dark");
+
+    await user.click(screen.getByLabelText(/Toggle Aptos theme/i));
+
+    expect(document.documentElement).toHaveAttribute("data-opnr-theme", "light");
+    expect(localStorage.getItem("opnr:aptos-theme:v1")).toBe("light");
+  });
+
+  it("warps the Aptos backdrop through pointer physics", async () => {
+    render(<App />);
+
+    await screen.findByLabelText(/Toggle Aptos theme/i);
+    const shell = document.querySelector<HTMLElement>(".aptos-app-shell");
+    expect(shell).toBeTruthy();
+    if (!shell) {
+      return;
+    }
+
+    fireEvent.pointerMove(shell, { clientX: 360, clientY: 220 });
+
+    await waitFor(() => {
+      expect(shell.style.getPropertyValue("--opnr-pointer-x")).not.toBe("");
+      expect(shell.style.getPropertyValue("--opnr-warp-radius")).not.toBe("190px");
+    });
+  });
+
+  it("renders a canvas-backed Aptos dot matrix renderer behind the shell", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await screen.findByLabelText(/Toggle Aptos theme/i);
+    const backdrop = screen.getByTestId("aptos-webgl-backdrop");
+
+    expect(backdrop.tagName).toBe("CANVAS");
+    expect(backdrop).toHaveAttribute("aria-hidden", "true");
+    expect(backdrop).toHaveAttribute("data-renderer", "clean-room-dot-matrix-field");
+    expect(backdrop).toHaveAttribute("data-matrix", "dot");
+    expect(backdrop).toHaveAttribute("data-layer-count", "1");
+    expect(backdrop).toHaveAttribute("data-idle-motion", "static");
+    expect(backdrop).toHaveAttribute("data-warp-mode", "fisheye-dot-displacement");
+    expect(backdrop).toHaveAttribute("data-theme-mode", "dark");
+
+    await user.click(screen.getByLabelText(/Toggle Aptos theme/i));
+
+    expect(backdrop).toHaveAttribute("data-theme-mode", "light");
+  });
+
+  it("opens the bracket menu and resets persisted panel layout", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("opnr:aptos-panel-layout:v1", JSON.stringify({ filters: { x: 42, y: 12 } }));
+
+    render(<App />);
+
+    const panel = screen.getByTestId("aptos-panel-filters");
+    expect(panel).toHaveStyle({ transform: "translate3d(42px, 12px, 0)" });
+
+    await user.click(await screen.findByRole("button", { name: /Open OPNR menu/i }));
+
+    const menu = screen.getByRole("menu", { name: /OPNR menu/i });
+    expect(menu).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: /Reset layout/i })).toBeInTheDocument();
+
+    await user.click(within(menu).getByRole("button", { name: /Reset layout/i }));
+
+    expect(localStorage.getItem("opnr:aptos-panel-layout:v1")).toBeNull();
+    expect(panel.getAttribute("style")).toBe("");
+  });
+
+  it("drags and persists Aptos lab panel positions", async () => {
+    render(<App />);
+
+    const dragHandle = await screen.findByRole("button", { name: /Drag filter instrument/i });
+    const panel = screen.getByTestId("aptos-panel-filters");
+
+    fireEvent.mouseDown(dragHandle, { clientX: 20, clientY: 20 });
+    fireEvent.mouseMove(window, { clientX: 72, clientY: 61 });
+    fireEvent.mouseUp(window, { clientX: 72, clientY: 61 });
+
+    await waitFor(() => {
+      const saved = JSON.parse(localStorage.getItem("opnr:aptos-panel-layout:v1") ?? "{}");
+      expect(saved.filters?.x).toBeGreaterThan(0);
+      expect(saved.filters?.y).toBeGreaterThan(0);
+    });
+    expect(panel.style.transform).toContain("translate3d(");
+  });
+
+  it("collapses application panels into draggable top bars", async () => {
+    const user = userEvent.setup();
+    window.history.pushState({}, "", "/");
+
+    render(<App />);
+
+    const panel = await screen.findByTestId("aptos-panel-selectedOverview");
+    const body = panel.querySelector(".dot-test-detail-body");
+
+    expect(panel).not.toHaveClass("is-collapsed");
+    expect(body).not.toHaveAttribute("hidden");
+
+    await user.click(screen.getByRole("button", { name: "Collapse build overview panel" }));
+
+    expect(panel).toHaveClass("is-collapsed");
+    expect(panel).toHaveAttribute("aria-expanded", "false");
+    expect(body).toHaveAttribute("hidden");
+    expect(screen.getByRole("button", { name: "Expand build overview panel" })).toHaveAttribute(
+      "aria-expanded",
+      "false"
+    );
+  });
+
+  it("routes blocked panel top-bar clicks to the visible panel chrome", async () => {
+    window.history.pushState({}, "", "/");
+
+    render(<App />);
+
+    const panel = await screen.findByTestId("aptos-panel-selectedComponents");
+    const header = panel.querySelector(".dot-test-detail-drag-bar");
+    const body = panel.querySelector(".dot-test-detail-body");
+    const collapseButton = within(panel).getByRole("button", { name: "Collapse components panel" });
+    const blocker = await screen.findByTestId("aptos-panel-inspector");
+    const blockerBody = blocker.querySelector(".dot-test-detail-body");
+
+    mockRect(panel, { left: 330, top: 463, width: 300, height: 226 });
+    mockRect(header, { left: 330, top: 463, width: 300, height: 36 });
+    mockRect(collapseButton, { left: 586, top: 469, width: 26, height: 24 });
+    mockRect(body, { left: 330, top: 499, width: 300, height: 190 });
+    mockRect(blocker, { left: 300, top: 430, width: 400, height: 250 });
+    mockRect(blockerBody, { left: 300, top: 460, width: 400, height: 220 });
+
+    const elementsFromPoint = vi.fn(() => [
+      blockerBody as Element,
+      collapseButton,
+      header as Element,
+      panel
+    ]);
+    Object.defineProperty(document, "elementsFromPoint", {
+      configurable: true,
+      value: elementsFromPoint
+    });
+
+    const pointerEvent = new MouseEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      clientX: 599,
+      clientY: 481
+    });
+    Object.defineProperty(pointerEvent, "pointerId", { value: 1 });
+
+    fireEvent(blockerBody as Element, pointerEvent);
+
+    expect(elementsFromPoint).toHaveBeenCalledWith(599, 481);
+    await waitFor(() => expect(panel).toHaveClass("is-collapsed"));
+    expect(panel).toHaveAttribute("aria-expanded", "false");
+    expect(body).toHaveAttribute("hidden");
+  });
+
+  it("keeps preview columns on a shared spacing rail", async () => {
+    window.history.pushState({}, "", "/");
+
+    render(<App />);
+
+    const row = await waitFor(() => {
+      const result = document.querySelector<HTMLElement>(".comp-row.selection-mode .row-header-trigger");
+      expect(result).toBeTruthy();
+      return result as HTMLElement;
+    });
+    const previewCells = Array.from(row.querySelectorAll<HTMLElement>("[data-preview-column]"));
+
+    expect(previewCells.map((cell) => cell.dataset.previewColumn)).toEqual(["champions", "augments", "components"]);
+    previewCells.forEach((cell) => {
+      expect(cell).toHaveClass("selection-preview-cell");
+    });
   });
 
   it("compresses visible playstyle labels when the icon already carries the action", () => {
@@ -98,7 +322,7 @@ describe("App", () => {
     const input = await screen.findByLabelText(/Quick search/i);
     expect(await screen.findByRole("button", { name: `Toggle comp ${getDisplayTitle(firstComp.title)}` })).toBeInTheDocument();
 
-    await user.type(input, firstComp.title);
+    fireEvent.change(input, { target: { value: firstComp.title } });
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: `Toggle comp ${getDisplayTitle(firstComp.title)}` })).toBeInTheDocument();
@@ -311,7 +535,8 @@ describe("App", () => {
 
     expect(rankCell).toBeInTheDocument();
     expect(rank).toBeDefined();
-    expect(rankCell.querySelector(".rank-icon")?.getAttribute("src")).toContain(`assets/ranks/${rank.tier.toLowerCase()}.svg`);
+    expect(rankCell.querySelector(".custom-rank-badge")).toHaveAttribute("data-rank-tier", rank.tier);
+    expect(rankCell.querySelector(".rank-glyph")).toHaveTextContent(rank.tier);
     expect(within(row).getByTestId("style-cell")).toBeInTheDocument();
     expect(within(row).getByTestId("composition-cell")).toHaveTextContent(getDisplayTitle(firstComp.title));
   });
@@ -333,7 +558,7 @@ describe("App", () => {
     expect(within(document.querySelector(".comp-row") as HTMLElement).getByTestId("source-cell")).toHaveTextContent(/ACD|MOB|TAC|FLW|MTF/);
 
     await user.click(screen.getByRole("button", { name: "Sort by rank" }));
-    expect(within(document.querySelector(".comp-row") as HTMLElement).getByTestId("rank-cell").querySelector(".rank-icon")).toBeInTheDocument();
+    expect(within(document.querySelector(".comp-row") as HTMLElement).getByTestId("rank-cell").querySelector(".custom-rank-badge")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Sort by style" }));
     const firstStyle = dataset.comps
@@ -382,8 +607,8 @@ describe("App", () => {
     const row = await waitFor(() => getCompRow(firstComp.title) as HTMLElement);
 
     expect(within(row).getByTestId("composition-cell")).toHaveTextContent(getDisplayTitle(firstComp.title));
-    expect(within(row).getByTestId("source-cell")).toBeInTheDocument();
-    expect(within(row).getByTestId("rank-cell").querySelector(".rank-icon")).toBeInTheDocument();
+    expect(within(row).getByTestId("source-cell")).toHaveTextContent(/signals/);
+    expect(within(row).getByTestId("rank-cell").querySelector(".custom-rank-badge")).toBeInTheDocument();
     expect(within(row).getByTestId("style-cell")).toBeInTheDocument();
   });
 
@@ -717,7 +942,7 @@ describe("App", () => {
     const row = await ensureExpanded(user, comp.title);
 
     expect(within(row).getAllByLabelText(`Build rank ${rankedSource.name} ${rankedSource.tier}`)[0]).toBeInTheDocument();
-    expect(within(row).getAllByLabelText(`Build rank ${rankedSource.name} ${rankedSource.tier}`)[0].querySelector(".rank-icon")).toBeInTheDocument();
+    expect(within(row).getAllByLabelText(`Build rank ${rankedSource.name} ${rankedSource.tier}`)[0].querySelector(".custom-rank-badge, .rank-glyph")).toBeInTheDocument();
     expect(within(row).getAllByText(styleLabel)[0]).toBeInTheDocument();
 
     await user.hover(within(row).getAllByRole("button", { name: `Inspect champion ${champion.name}` })[0]);

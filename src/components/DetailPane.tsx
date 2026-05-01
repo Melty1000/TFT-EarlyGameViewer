@@ -1,8 +1,9 @@
-import { useState } from "react";
-import type { Augment, Champion, Comp, Dataset, Synergy } from "../../shared/tft";
+import { useState, type CSSProperties } from "react";
+import type { Augment, Champion, Comp, Dataset, GuideSection, Synergy } from "../../shared/tft";
 import type { PhaseKey } from "../../shared/normalization";
-import { getCompPlaystyle, getCompRankTags, getPlaystyleIcon, getPlaystyleLabel, getRankIcon } from "../lib/compMeta";
+import { getCompPlaystyle, getCompRankTags, getPlaystyleIcon, getPlaystyleLabel } from "../lib/compMeta";
 import { getItemDisplay } from "../lib/items";
+import { RankBadge } from "./RankBadge";
 
 export type InspectorTarget =
   | { kind: "champion"; id: string }
@@ -12,6 +13,11 @@ export type InspectorTarget =
   | null;
 
 export type DetailTab = "overview" | PhaseKey;
+export type InspectorChip = {
+  key: string;
+  label: string;
+  icon?: string;
+};
 
 type DetailPaneProps = {
   comp: Comp;
@@ -54,7 +60,7 @@ function cleanGameText(value: string) {
     .trim();
 }
 
-function buildInspectorModel(
+export function buildInspectorModel(
   comp: Comp,
   dataset: Dataset,
   activePhase: PhaseKey,
@@ -63,7 +69,7 @@ function buildInspectorModel(
   title: string;
   subtitle?: string;
   body: string;
-  chips: string[];
+  chips: InspectorChip[];
   icon: string;
   accent: string;
   unlockCondition?: string | null;
@@ -95,7 +101,14 @@ function buildInspectorModel(
       title: champion.name,
       subtitle: champion.abilityName,
       body: cleanGameText(champion.abilityDesc) || "No champion ability description was captured.",
-      chips: champion.traitIds.map((traitId) => dataset.synergiesById[traitId]?.name ?? traitId),
+      chips: champion.traitIds.map((traitId) => {
+        const synergy = dataset.synergiesById[traitId];
+        return {
+          key: traitId,
+          label: synergy?.name ?? traitId,
+          icon: synergy?.icon
+        };
+      }),
       icon: champion.icon,
       accent: `Cost ${champion.cost}`,
       unlockCondition: champion.requiresUnlock ? champion.unlockCondition : null,
@@ -108,11 +121,14 @@ function buildInspectorModel(
     if (!synergy) {
       return null;
     }
-    const breakpointChips = synergy.breakpoints.map((bp) => `${bp.units}`);
+    const breakpointChips = synergy.breakpoints.map((bp, index) => ({
+      key: `breakpoint-${index}-${bp.units}`,
+      label: `${bp.units}`
+    }));
     return {
       title: synergy.name,
       body: cleanGameText(synergy.description) || "No trait description was captured.",
-      chips: breakpointChips.length ? breakpointChips : ["Trait"],
+      chips: breakpointChips.length ? breakpointChips : [{ key: "trait", label: "Trait" }],
       icon: synergy.icon,
       accent: "Trait"
     };
@@ -138,13 +154,13 @@ function buildInspectorModel(
   return {
     title: augment.name,
     body: cleanGameText(augment.description) || "No augment description was captured.",
-    chips: [augment.tier],
+    chips: [{ key: `tier-${augment.tier}`, label: augment.tier }],
     icon: augment.icon,
     accent: `${augment.tier} tier`
   };
 }
 
-function renderChampionTile(
+export function renderChampionTile(
   slotKey: number,
   champion: Champion | undefined,
   itemIds: string[],
@@ -192,7 +208,12 @@ function renderChampionTile(
       </button>
       {stars > 1 ? (
         <span className={`champ-star-badge stars-${stars}`} title={`Target: ${stars}-star`}>
-          {"★".repeat(stars)}
+          {Array.from({ length: stars }, (_, index) => (
+            <span key={index} className="champ-star-mark" aria-hidden="true">
+              ★
+            </span>
+          ))}
+          <span className="sr-only">{stars}-star</span>
         </span>
       ) : null}
       {champion.requiresUnlock ? (
@@ -236,7 +257,7 @@ function renderChampionTile(
   );
 }
 
-function renderAugment(
+export function renderAugment(
   augment: Augment | undefined,
   onHoverAugment: (id: string | null) => void,
   onToggleLock: (target: InspectorTarget) => void,
@@ -253,6 +274,11 @@ function renderAugment(
       title={`${augment.name} - click to pin, right-click to filter`}
       onMouseEnter={() => onHoverAugment(augment.id)}
       onMouseLeave={() => onHoverAugment(null)}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onQuickFilter(augment.name);
+      }}
     >
       <button
         type="button"
@@ -268,32 +294,47 @@ function renderAugment(
         <img src={augment.icon} alt={augment.name} className="augment-icon" />
         <div className="augment-copy">
           <span className="augment-name">{augment.name}</span>
-          <span className="augment-rank">{augment.tier}</span>
         </div>
       </button>
+      <span className="augment-rank" aria-label={`${augment.tier} augment tier`}>
+        {augment.tier}
+      </span>
     </div>
   );
 }
 
-function parseLevellingGuideLine(line: string) {
-  const match = line.match(/\blevel\s+(?<level>\d+)\b/i);
+type LevellingGuideAction = "level" | "push" | "stay";
+
+export function parseLevellingGuideLine(line: string) {
+  const match = line.match(/\b(?<action>level(?:\s+to)?|push\s+level|stay\s+level)\s+(?<level>\d+)\b/i);
 
   if (!match?.groups) {
     return null;
   }
 
-  const stage = line.match(/\b(?:at|through)\s+(?<stage>\d-\d)\b/i)?.groups?.stage ?? "";
-  const gold = line.match(/\b(?<gold>\d+\+\s+gold)\b/i)?.groups?.gold ?? "";
+  const actionText = match.groups.action.toLowerCase();
+  const action: LevellingGuideAction = actionText.startsWith("push")
+    ? "push"
+    : actionText.startsWith("stay")
+      ? "stay"
+      : "level";
+  const afterAction = line.slice((match.index ?? 0) + match[0].length);
+  const stageMatch = afterAction.match(/^\s*(?:at|on|through)\s+(?<stage>\d-\d)\b/i);
+  const afterStage = stageMatch ? afterAction.slice(stageMatch[0].length) : afterAction;
+  const goldMatch = afterStage.match(/^\s*with\s+(?<gold>~?\d+\+?\s*(?:gold|g))\b/i);
+  const stage = stageMatch?.groups?.stage ?? "";
+  const gold = goldMatch?.groups?.gold ?? "";
   const note = line
-    .replace(/^.*?\blevel\s+\d+\b/i, "")
-    .replace(/\b(?:at|through)\s+\d-\d\b/i, "")
-    .replace(/\bwith\s+\d+\+\s+gold\b/i, "")
-    .replace(/\b\d+\+\s+gold\b/i, "")
-    .replace(/^[\s—-]+/, "")
+    .replace(match[0], "")
+    .replace(/^\s*(?:at|on|through)\s+\d-\d\b/i, "")
+    .replace(/^\s*with\s+~?\d+\+?\s*(?:gold|g)\b/i, "")
+    .replace(/^[\s—.,-]+/, "")
     .replace(/\s{2,}/g, " ")
     .trim();
 
   return {
+    rawLine: line,
+    action,
     level: match.groups.level,
     stage,
     gold,
@@ -302,6 +343,120 @@ function parseLevellingGuideLine(line: string) {
 }
 
 type LevellingGuideEntry = NonNullable<ReturnType<typeof parseLevellingGuideLine>>;
+
+type LevellingGuideModel = {
+  mode: "route" | "rules" | "native";
+  entries: LevellingGuideEntry[];
+  nativeLines: string[];
+};
+
+function buildLevellingGuideModel(lines: string[]): LevellingGuideModel {
+  const parsedLines = lines.map((line) => ({ line, entry: parseLevellingGuideLine(line) }));
+  const entries = parsedLines.map(({ entry }) => entry).filter((entry): entry is LevellingGuideEntry => Boolean(entry));
+  const nativeLines = parsedLines.filter(({ entry }) => !entry).map(({ line }) => line);
+  const stagedEntryCount = entries.filter((entry) => entry.stage).length;
+
+  if (!entries.length) {
+    return { mode: "native", entries, nativeLines };
+  }
+
+  return {
+    mode: stagedEntryCount >= 2 ? "route" : "rules",
+    entries,
+    nativeLines
+  };
+}
+
+function getLevelActionLabel(action: LevellingGuideAction) {
+  if (action === "push") {
+    return "push";
+  }
+
+  if (action === "stay") {
+    return "hold";
+  }
+
+  return "";
+}
+
+export function LevellingGuideContent({ section, className = "" }: { section: GuideSection; className?: string }) {
+  const model = buildLevellingGuideModel(section.lines);
+  const classNames = ["level-guide-content", `is-${model.mode}`, className].filter(Boolean).join(" ");
+
+  if (model.mode === "native") {
+    return (
+      <div className={classNames}>
+        <div className="level-guide-native-list">
+          {model.nativeLines.map((line, index) => (
+            <p key={`${section.title}-${index}-${line}`} className="level-guide-native-line">
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              {line}
+            </p>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (model.mode === "rules") {
+    return (
+      <div className={classNames}>
+        <div className="level-guide-rule-list">
+          {model.entries.map((entry, index) => (
+            <div key={`${section.title}-${index}-${entry.rawLine}`} className={`level-guide-rule action-${entry.action}`}>
+              <span className="level-guide-rule-index">{String(index + 1).padStart(2, "0")}</span>
+              <strong className="level-guide-rule-target">L{entry.level}</strong>
+              <p>{entry.note ?? entry.rawLine}</p>
+            </div>
+          ))}
+          {model.nativeLines.map((line, index) => (
+            <div key={`${section.title}-native-${index}-${line}`} className="level-guide-rule is-native">
+              <span className="level-guide-rule-index">--</span>
+              <strong className="level-guide-rule-target">NOTE</strong>
+              <p>{line}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={classNames}>
+      <div className="level-guide-route">
+        {model.entries.map((entry, index) => {
+          const actionLabel = getLevelActionLabel(entry.action);
+          return (
+            <div key={`${section.title}-${index}-${entry.rawLine}`} className={`level-guide-step action-${entry.action}`}>
+              <div className="level-guide-node" aria-hidden="true" />
+              <div className="level-guide-level">L{entry.level}</div>
+              <div className="level-guide-detail">
+                <div className="level-guide-meta">
+                  {entry.stage ? <span className="level-guide-pill">{entry.stage}</span> : null}
+                  {entry.gold ? <span className="level-guide-pill muted">{entry.gold}</span> : null}
+                  {actionLabel ? <span className="level-guide-action">{actionLabel}</span> : null}
+                </div>
+                {entry.note ? <p className="level-guide-note">{entry.note}</p> : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {model.nativeLines.length ? (
+        <div className="level-guide-route level-guide-extra">
+          {model.nativeLines.map((line, index) => (
+            <div key={`${section.title}-native-${index}-${line}`} className="level-guide-step level-guide-extra-step">
+              <div className="level-guide-extra-label">NOTE</div>
+              <div className="level-guide-detail">
+                <p className="level-guide-note">{line}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function renderDefaultGuideSection(section: Comp["guide"]["overview"][number], selectedTab: DetailTab) {
   return (
@@ -384,43 +539,12 @@ function renderGuideSection(section: Comp["guide"]["overview"][number], selected
     return renderDefaultGuideSection(section, selectedTab);
   }
 
-  const parsedLines = section.lines.map((line) => ({ line, entry: parseLevellingGuideLine(line) }));
-  const entries = parsedLines
-    .map(({ entry }) => entry)
-    .filter((entry): entry is LevellingGuideEntry => Boolean(entry));
-  const extraLines = parsedLines.filter(({ entry }) => !entry).map(({ line }) => line);
-
-  if (!entries.length) {
-    return renderDefaultGuideSection(section, selectedTab);
-  }
-
   return (
     <article key={`${selectedTab}-${section.title}`} className="guide-card levelling-guide-card">
       <div className="guide-card-header">
         <h3>{section.title}</h3>
       </div>
-      <div className="level-guide-timeline">
-        {entries.map((entry) => (
-          <div key={`${section.title}-${entry.level}-${entry.stage}`} className="level-guide-step">
-            <div className="level-guide-node" aria-hidden="true" />
-            <div className="level-guide-level">L{entry.level}</div>
-            <div className="level-guide-detail">
-              <div className="level-guide-meta">
-                {entry.stage ? <span className="level-guide-pill">{entry.stage}</span> : null}
-                {entry.gold ? <span className="level-guide-pill muted">{entry.gold}</span> : null}
-              </div>
-              {entry.note ? <p className="level-guide-note">{entry.note}</p> : null}
-            </div>
-          </div>
-        ))}
-      </div>
-      {extraLines.length ? (
-        <div className="level-guide-extra">
-          {extraLines.map((line) => (
-            <p key={`${section.title}-${line}`}>{line}</p>
-          ))}
-        </div>
-      ) : null}
+      <LevellingGuideContent section={section} />
     </article>
   );
 }
@@ -503,17 +627,11 @@ export function DetailPane({
                 {playstyleLabel}
               </span>
             ) : null}
-            {rankTags.slice(0, 4).map((rank) => (
-              <span
-                key={rank.key}
-                className={`rank-chip rank-${rank.tier.toLowerCase()}`}
-                title={rank.label}
-                aria-label={`Build rank ${rank.label}`}
-              >
-                <img src={getRankIcon(rank.tier)} alt="" className="rank-icon" aria-hidden="true" />
-                <span className="rank-source">{rank.sourceShort}</span>
-              </span>
-            ))}
+            {rankTags
+              .slice(0, 4)
+              .map((rank) => (
+                <RankBadge key={rank.key} tier={rank.tier} label={rank.label} sourceShort={rank.sourceShort} />
+              ))}
           </div>
         </div>
         <div className="detail-toolbar-actions">
@@ -652,21 +770,30 @@ export function DetailPane({
             <div className="inspector-head">
               <img src={activeInspector.icon} alt={activeInspector.title} className="inspector-icon" />
               <div className="inspector-copy">
-                <span className="accent-pill">{activeInspector.accent}</span>
+                <div className="inspector-meta-row">
+                  <span className="accent-pill">{activeInspector.accent}</span>
+                  {activeInspector.chips.length > 0 ? (
+                    <div className="mini-chip-row wrap">
+                      {activeInspector.chips.map((chip) => (
+                        <span key={chip.key} className={chip.icon ? "mini-chip muted with-icon" : "mini-chip muted"}>
+                          {chip.icon ? (
+                            <span
+                              className="mini-chip-icon"
+                              style={{ "--mini-chip-icon": `url(${chip.icon})` } as CSSProperties}
+                              aria-hidden="true"
+                            />
+                          ) : null}
+                          <span>{chip.label}</span>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
                 <h4 data-testid="inspector-title">{activeInspector.title}</h4>
                 {activeInspector.subtitle ? <p className="inspector-subtitle">{activeInspector.subtitle}</p> : null}
               </div>
             </div>
             <div className="inspector-content">
-              {activeInspector.chips.length > 0 ? (
-                <div className="mini-chip-row wrap">
-                  {activeInspector.chips.map((chip) => (
-                    <span key={chip} className="mini-chip muted">
-                      {chip}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
               {activeInspector.unlockCondition ? (
                 <div className="unlock-callout">
                   <img src={`${import.meta.env.BASE_URL}assets/system/lock.svg`} alt="" className="unlock-callout-icon" />

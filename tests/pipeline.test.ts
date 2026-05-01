@@ -22,6 +22,19 @@ describe("dataset validation", () => {
     expect(dataset.comps.some((comp) => comp.notes?.toLowerCase().includes("merged"))).toBe(false);
   });
 
+  it("rejects comps that merge provider sources", () => {
+    const dataset = datasetSchema.parse(structuredClone(generatedDataset));
+    dataset.comps[0].sources.push({
+      name: "mobalytics",
+      url: "https://mobalytics.gg/tft/team-comps",
+      evidence: []
+    });
+
+    const problems = validateDataset(dataset);
+
+    expect(problems.some((problem) => problem.includes("merged provider builds are not allowed"))).toBe(true);
+  });
+
   it("flags missing champion references and remote assets", () => {
     const dataset = datasetSchema.parse(structuredClone(generatedDataset));
     dataset.comps[0].phases.late.championIds.push("missing-champion");
@@ -112,6 +125,31 @@ describe("dataset validation", () => {
     const dataset = datasetSchema.parse(generatedDataset);
 
     expect(dataset.comps.every((comp) => comp.recommendedAugmentIds.length > 0)).toBe(true);
+  });
+
+  it("ships provider-native evidence and provenance for every provider build", () => {
+    const dataset = datasetSchema.parse(generatedDataset);
+
+    expect(
+      dataset.comps.every((comp) => {
+        const source = comp.sources[0];
+        return (
+          source?.provenance?.provider === source?.name &&
+          source.provenance?.url === source.url &&
+          source.evidence.some((entry) => entry.kind === "board") &&
+          source.evidence.some((entry) => entry.kind === "augment")
+        );
+      })
+    ).toBe(true);
+  });
+
+  it("rejects provider builds without native evidence", () => {
+    const dataset = datasetSchema.parse(structuredClone(generatedDataset));
+    dataset.comps[0].sources[0].evidence = [];
+
+    const problems = validateDataset(dataset);
+
+    expect(problems.some((problem) => problem.includes("provider-native evidence"))).toBe(true);
   });
 
   it("resolves Mobalytics legacy item slugs to current item names", () => {

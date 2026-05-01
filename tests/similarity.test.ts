@@ -41,7 +41,7 @@ function comp(
     id,
     title: id,
     sourceUrl: `https://example.com/${id}`,
-    sources: [{ name: "fixture", url: `https://example.com/${id}`, tier: "A", confidence: 1 }],
+    sources: [{ name: "fixture", url: `https://example.com/${id}`, tier: "A", confidence: 1, evidence: [] }],
     phases,
     recommendedAugmentIds,
     guide: {

@@ -20,7 +20,9 @@ import {
   type CompGuide,
   type Dataset,
   type GuideSection,
-  type PhaseData
+  type PhaseData,
+  type ProviderEvidence,
+  type ProviderProvenance
 } from "../shared/tft";
 
 type SourceName = "tftacademy" | "mobalytics" | "tftactics" | "tftflow" | "metatft";
@@ -48,6 +50,7 @@ type SourceComp = {
   playstyle?: string;
   units: SourceUnit[];
   earlyUnits?: SourceUnit[];
+  midUnits?: SourceUnit[];
   finalUnits?: SourceUnit[];
   augments?: SourceAugment[];
   augmentTypes?: string[];
@@ -197,6 +200,28 @@ type AssetDownload = {
 
 type MobalyticsLookups = {
   comps: SourceComp[];
+  championsById: Record<
+    string,
+    {
+      id: string;
+      name: string;
+      cost: number;
+      traitIds: string[];
+      abilityName: string;
+      abilityDesc: string;
+      requiresUnlock: boolean;
+      unlockCondition: string | null;
+      role?: string;
+      stats: {
+        hp: number | null;
+        mana: number | null;
+        initialMana: number | null;
+        damage: number | null;
+        range: number | null;
+      };
+      iconUrl: string | null;
+    }
+  >;
   augmentRankByApi: Record<string, string>;
   augmentRankBySlug: Record<string, string>;
   augmentNameByApi: Record<string, string>;
@@ -373,6 +398,22 @@ async function fetchText(url: string) {
     throw new Error(`Request failed for ${url}: ${response.status}`);
   }
   return response.text();
+}
+
+async function fetchTextWithRetries(url: string, attempts = 3) {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await fetchText(url);
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) {
+        await new Promise((resolve) => setTimeout(resolve, 750 * attempt));
+      }
+    }
+  }
+
+  throw lastError;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -558,6 +599,11 @@ function buildSourceUnitFromChampionId(
   return { championId, itemIds, boardIndex, starLevel };
 }
 
+function numberOrNull(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 function buildCatalogs(cdragon: CDragonTftData, mobalytics: MobalyticsLookups, teamPlanner: TeamPlannerData): Catalogs {
   const assetDownloads: AssetDownload[] = [];
   const setData =
@@ -649,6 +695,26 @@ function buildCatalogs(cdragon: CDragonTftData, mobalytics: MobalyticsLookups, t
         range: champion.stats?.range ?? null
       },
       icon: queueAsset(assetDownloads, cdragonAssetUrl(champion.tileIcon ?? champion.squareIcon ?? champion.icon), "champions", id)
+    };
+  }
+
+  for (const [id, champion] of Object.entries(mobalytics.championsById)) {
+    if (championsById[id]) {
+      continue;
+    }
+
+    championRoles[id] = champion.role ?? "";
+    championsById[id] = {
+      id,
+      name: champion.name,
+      cost: champion.cost,
+      traitIds: champion.traitIds,
+      abilityName: champion.abilityName,
+      abilityDesc: champion.abilityDesc,
+      requiresUnlock: champion.requiresUnlock,
+      unlockCondition: champion.unlockCondition,
+      stats: champion.stats,
+      icon: queueAsset(assetDownloads, champion.iconUrl, "champions", id)
     };
   }
 
@@ -864,6 +930,135 @@ function normalizeSourceUnits(
     .filter((unit): unit is SourceUnit => Boolean(unit));
 }
 
+function mobalyticsBoardIndex(coordinates: unknown) {
+  const coordinate = Number(coordinates);
+  if (!Number.isFinite(coordinate)) {
+    return undefined;
+  }
+
+  if (coordinate >= 1 && coordinate <= 28) {
+    return coordinate - 1;
+  }
+
+  if (coordinate >= 0 && coordinate <= 27) {
+    return coordinate;
+  }
+
+  return undefined;
+}
+
+function mobalyticsPositionToSourceUnit(position: any, itemIdBySlug: Record<string, string>): SourceUnit | null {
+  const champion = position.champion?.champion;
+  const championId = championIdFromName(champion?.slug ?? champion?.name);
+  if (!championId) {
+    return null;
+  }
+
+  const rawStar =
+    position.champion?.level ??
+    position.champion?.starLevel ??
+    position.champion?.star ??
+    position.champion?.stars ??
+    position.starLevel ??
+    position.star;
+  const starLevel = typeof rawStar === "number" && rawStar >= 1 && rawStar <= 3 ? Math.round(rawStar) : undefined;
+
+  return {
+    championId,
+    boardIndex: mobalyticsBoardIndex(position.coordinates),
+    itemIds: (position.champion?.items ?? [])
+      .map((item: any) => itemIdBySlug[normalizeId(item.slug)] ?? normalizeId(item.slug))
+      .filter(Boolean),
+    starLevel
+  };
+}
+
+function mobalyticsFormationUnits(formation: any, itemIdBySlug: Record<string, string>) {
+  return (formation?.positions ?? [])
+    .map((position: any) => mobalyticsPositionToSourceUnit(position, itemIdBySlug))
+    .filter((unit: SourceUnit | null): unit is SourceUnit => Boolean(unit));
+}
+
+function mobalyticsCompFromPreloadedState(state: any, externalId: string) {
+  const setKey = `set${CURRENT_SET}`;
+  const commonComps = state.tftState?.commonDataStore?.gameSetsData?.[setKey]?.teamCompsInternal ?? [];
+  const commonMatch = commonComps.find((comp: any) => comp.id === externalId || comp.guide?.compositionId === externalId);
+  if (commonMatch) {
+    return commonMatch;
+  }
+
+  const dynamic = state.tftState?.apollo?.dynamic ?? {};
+  const stat = state.tftState?.apollo?.static ?? {};
+  const allCache = { ...stat, ...dynamic };
+  for (const [key, raw] of Object.entries(dynamic)) {
+    if (!key.startsWith("TftComposition:")) {
+      continue;
+    }
+    const comp = derefApollo(allCache, raw);
+    if (comp.id === externalId || comp.guide?.compositionId === externalId) {
+      return comp;
+    }
+  }
+
+  return null;
+}
+
+function mobalyticsTipsFromDetail(comp: any): SourceComp["tips"] {
+  return compactLines([
+    comp.description ? `Overview: ${comp.description}` : null,
+    comp.guide?.whenToMake ? `When to make: ${comp.guide.whenToMake}` : null,
+    comp.guide?.early?.advice ? `Early: ${comp.guide.early.advice}` : null,
+    comp.guide?.mid?.advice ? `Mid: ${comp.guide.mid.advice}` : null
+  ]).map((tip) => {
+    const [stage, ...parts] = tip.split(":");
+    return { stage: cleanText(stage), tip: cleanText(parts.join(":")) };
+  });
+}
+
+async function mapWithConcurrency<T, U>(items: T[], limit: number, mapper: (item: T, index: number) => Promise<U>) {
+  const results: U[] = new Array(items.length);
+  let nextIndex = 0;
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (nextIndex < items.length) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+      }
+    })
+  );
+
+  return results;
+}
+
+async function hydrateMobalyticsDetailComps(comps: SourceComp[], itemIdBySlug: Record<string, string>) {
+  return mapWithConcurrency(comps, 4, async (comp) => {
+    try {
+      const detailState = extractPreloadedState(await fetchTextWithRetries(comp.url));
+      const detailComp = mobalyticsCompFromPreloadedState(detailState, comp.externalId);
+      if (!detailComp) {
+        return comp;
+      }
+
+      const detailFinalUnits = mobalyticsFormationUnits(detailComp.formation, itemIdBySlug);
+      const detailEarlyUnits = mobalyticsFormationUnits(detailComp.guide?.early?.formation, itemIdBySlug);
+      const detailMidUnits = mobalyticsFormationUnits(detailComp.guide?.mid?.formation, itemIdBySlug);
+      return {
+        ...comp,
+        finalUnits: detailFinalUnits.length ? detailFinalUnits : comp.finalUnits,
+        units: detailFinalUnits.length ? detailFinalUnits : comp.units,
+        earlyUnits: detailEarlyUnits.length ? detailEarlyUnits : comp.earlyUnits,
+        midUnits: detailMidUnits.length ? detailMidUnits : comp.midUnits,
+        tips: mobalyticsTipsFromDetail(detailComp)
+      };
+    } catch (error) {
+      console.warn(`Mobalytics detail hydrate failed for ${comp.url}:`, error);
+      return comp;
+    }
+  });
+}
+
 async function loadMobalyticsLookups(): Promise<MobalyticsLookups> {
   const html = await fetchText(MOBALYTICS_COMPS_URL);
   const state = extractPreloadedState(html);
@@ -898,53 +1093,57 @@ async function loadMobalyticsLookups(): Promise<MobalyticsLookups> {
   }
 
   const championUnlocksById: MobalyticsLookups["championUnlocksById"] = {};
+  const championsById: MobalyticsLookups["championsById"] = {};
   for (const [key, raw] of Object.entries(stat)) {
     if (!key.startsWith("ChampionsV1DataFlatDto")) {
       continue;
     }
-    const champion = raw as any;
+    const champion = derefApollo(allCache, raw);
     if (champion.gameSet !== `set${CURRENT_SET}`) {
       continue;
     }
     const id = championIdFromName(champion.slug ?? champion.name);
+    if (!id) {
+      continue;
+    }
+    const slug = normalizeId(champion.slug ?? champion.name);
     championUnlocksById[id] = {
       requiresUnlock: Boolean(champion.isUnlockable || champion.unlockCondition),
       unlockCondition: cleanText(champion.unlockCondition) || null
     };
+    const ability = champion.abilities?.[0]?.flatData ?? champion.abilities?.[0] ?? {};
+    championsById[id] = {
+      id,
+      name: cleanText(champion.name) || titleCaseFromSlug(id),
+      cost: Number.isFinite(Number(champion.cost)) ? Number(champion.cost) : 1,
+      traitIds: (champion.synergies ?? [])
+        .map((synergy: any) => normalizeId(synergy.flatData?.slug ?? synergy.slug ?? synergy.name))
+        .filter(Boolean),
+      abilityName: cleanText(ability.name) || `${cleanText(champion.name) || titleCaseFromSlug(id)} ability`,
+      abilityDesc: cleanGameText(ability.description),
+      requiresUnlock: Boolean(champion.isUnlockable || champion.unlockCondition),
+      unlockCondition: cleanText(champion.unlockCondition) || null,
+      role: cleanText(champion.role),
+      stats: {
+        hp: numberOrNull(champion.health ?? champion.hp),
+        mana: numberOrNull(champion.mana),
+        initialMana: numberOrNull(champion.initialMana),
+        damage: numberOrNull(champion.damage),
+        range: numberOrNull(champion.attackRange ?? champion.range)
+      },
+      iconUrl: slug ? `https://cdn.mobalytics.gg/assets/tft/images/champions/icons/set${CURRENT_SET}/${slug}.png?v=5` : null
+    };
   }
 
-  const comps = Object.entries(dynamic)
+  const comps = await hydrateMobalyticsDetailComps(
+    Object.entries(dynamic)
     .filter(([key]) => key.startsWith("TftComposition:"))
     .map(([key, raw]) => {
       const comp = derefApollo(allCache, raw);
       const guide = derefApollo(allCache, comp.guide);
-      const finalUnits = (comp.formation?.positions ?? [])
-        .map((position: any) => {
-          const champion = position.champion?.champion;
-          const championId = championIdFromName(champion?.slug);
-          if (!championId) {
-            return null;
-          }
-          const rawStar =
-            position.champion?.level ??
-            position.champion?.starLevel ??
-            position.champion?.star ??
-            position.champion?.stars ??
-            position.starLevel ??
-            position.star;
-          const starLevel = typeof rawStar === "number" && rawStar >= 1 && rawStar <= 3 ? Math.round(rawStar) : undefined;
-          return {
-            championId,
-            boardIndex: Number.isFinite(Number(position.coordinates))
-              ? Number(position.coordinates)
-              : undefined,
-            itemIds: (position.champion?.items ?? [])
-              .map((item: any) => itemIdBySlug[normalizeId(item.slug)] ?? normalizeId(item.slug))
-              .filter(Boolean),
-            starLevel
-          } satisfies SourceUnit;
-        })
-        .filter((unit: SourceUnit | null): unit is SourceUnit => Boolean(unit));
+      const earlyUnits = mobalyticsFormationUnits(guide?.early?.formation, itemIdBySlug);
+      const midUnits = mobalyticsFormationUnits(guide?.mid?.formation, itemIdBySlug);
+      const finalUnits = mobalyticsFormationUnits(comp.formation, itemIdBySlug);
 
       const augments = (guide?.augments?.augments ?? [])
         .map((augment: any) => ({
@@ -961,13 +1160,17 @@ async function loadMobalyticsLookups(): Promise<MobalyticsLookups> {
         tier: cleanText(comp.tier).toUpperCase(),
         playstyle: cleanText(comp.playstyle),
         units: finalUnits,
+        earlyUnits,
+        midUnits,
         finalUnits,
         augments,
         tips: comp.description ? [{ stage: "Overview", tip: comp.description }] : [],
         createdAt: comp.createdAt,
         updatedAt: comp.updatedAt
       } satisfies SourceComp;
-    });
+    }),
+    itemIdBySlug
+  );
 
   if (process.env.SKIP_TEAM_CODES !== "1") {
     await populateMobalyticsTeamCodes(comps);
@@ -981,6 +1184,7 @@ async function loadMobalyticsLookups(): Promise<MobalyticsLookups> {
 
   return {
     comps,
+    championsById,
     augmentRankByApi,
     augmentRankBySlug,
     augmentNameByApi,
@@ -1873,8 +2077,140 @@ function sectionsByStage(tips: SourceComp["tips"] | undefined, matcher: RegExp) 
     .filter(Boolean);
 }
 
-function buildGuide(comp: SourceComp, contributors: SourceComp[], catalogs: Pick<Catalogs, "championsById" | "itemNameById">): CompGuide {
-  const allTips = contributors.flatMap((source) => source.tips ?? []);
+function evidencePhaseFromText(value: string): ProviderEvidence["phase"] {
+  if (/stage 2|early/i.test(value)) {
+    return "early";
+  }
+  if (/stage 3|mid/i.test(value)) {
+    return "mid";
+  }
+  if (/stage 4|stage 5|late|cap/i.test(value)) {
+    return "late";
+  }
+  return "overview";
+}
+
+function sourceUnitEvidenceLabel(unit: SourceUnit, catalogs: Pick<Catalogs, "championsById" | "itemNameById">) {
+  const champion = catalogs.championsById[unit.championId];
+  const championName = champion?.name ?? titleCaseFromSlug(unit.championId);
+  const itemNames = unit.itemIds
+    .map((itemId) => catalogs.itemNameById[itemId] ?? COMPONENT_LABELS[itemId] ?? titleCaseFromSlug(itemId))
+    .filter(Boolean);
+  const slot = typeof unit.boardIndex === "number" ? ` slot ${unit.boardIndex + 1}` : "";
+  const stars = unit.starLevel && unit.starLevel > 1 ? ` ${unit.starLevel}-star` : "";
+  const items = itemNames.length ? ` with ${itemNames.join(", ")}` : "";
+
+  return `${championName}${stars}${slot}${items}`;
+}
+
+function buildProviderEvidence(
+  comp: SourceComp,
+  catalogs: Pick<Catalogs, "championsById" | "itemNameById">
+): ProviderEvidence[] {
+  const evidence: ProviderEvidence[] = [];
+  const pushEvidence = (
+    kind: ProviderEvidence["kind"],
+    label: string,
+    value: string | null | undefined,
+    providerField: string,
+    phase?: ProviderEvidence["phase"]
+  ) => {
+    const cleanedValue = cleanText(value);
+    if (!cleanedValue) {
+      return;
+    }
+
+    evidence.push({
+      kind,
+      label,
+      value: cleanedValue,
+      providerField,
+      phase,
+      confidence: 1
+    });
+  };
+  const pushBoardEvidence = (phase: PhaseKey, units: SourceUnit[] | undefined, providerField: string) => {
+    if (!units?.length) {
+      return;
+    }
+
+    pushEvidence(
+      "board",
+      `${phase} board`,
+      units.map((unit) => sourceUnitEvidenceLabel(unit, catalogs)).join(" | "),
+      providerField,
+      phase
+    );
+  };
+
+  pushEvidence("identity", "Provider title", comp.title, "title", "overview");
+  pushEvidence("rank", "Provider rank", comp.tier, "tier", "overview");
+  pushEvidence("style", "Provider style", comp.playstyle, "playstyle", "overview");
+
+  pushBoardEvidence("early", comp.earlyUnits, "earlyUnits");
+  pushBoardEvidence("mid", comp.midUnits, "midUnits");
+  pushBoardEvidence("late", comp.finalUnits?.length ? comp.finalUnits : comp.units, comp.finalUnits?.length ? "finalUnits" : "units");
+
+  for (const augment of comp.augments ?? []) {
+    const value = cleanText(augment.name) || cleanText(augment.slug) || cleanText(augment.apiName);
+    pushEvidence("augment", "Provider augment", value, "augments", "overview");
+  }
+
+  for (const augmentType of comp.augmentTypes ?? []) {
+    pushEvidence("augment-angle", "Augment angle", augmentType, "augmentTypes", "overview");
+  }
+
+  pushEvidence("guide", "Augment note", comp.augmentsTip, "augmentsTip", "overview");
+
+  for (const tip of comp.tips ?? []) {
+    const stage = cleanText(tip.stage) || "Guide";
+    const value = cleanText(tip.tip);
+    pushEvidence("guide", stage, value, "tips", evidencePhaseFromText(`${stage} ${value}`));
+  }
+
+  for (const line of comp.levelingLines ?? []) {
+    pushEvidence("leveling", "Leveling line", line, "levelingLines", "overview");
+  }
+
+  if (comp.mainChampionId) {
+    pushEvidence(
+      "identity",
+      "Main champion",
+      catalogs.championsById[comp.mainChampionId]?.name ?? titleCaseFromSlug(comp.mainChampionId),
+      "mainChampionId",
+      "overview"
+    );
+  }
+  if (comp.mainItemId) {
+    pushEvidence(
+      "item",
+      "Main item",
+      catalogs.itemNameById[comp.mainItemId] ?? COMPONENT_LABELS[comp.mainItemId] ?? titleCaseFromSlug(comp.mainItemId),
+      "mainItemId",
+      "overview"
+    );
+  }
+
+  pushEvidence("team-code", "Team planner code", comp.teamCode, "teamCode", "overview");
+  pushEvidence("metadata", "Provider created", comp.createdAt, "createdAt", "overview");
+  pushEvidence("metadata", "Provider updated", comp.updatedAt, "updatedAt", "overview");
+
+  return evidence;
+}
+
+function buildProviderProvenance(comp: SourceComp, capturedAt: string): ProviderProvenance {
+  return {
+    provider: comp.source,
+    url: comp.url,
+    externalId: comp.externalId || undefined,
+    capturedAt,
+    createdAt: cleanText(comp.createdAt) || undefined,
+    updatedAt: cleanText(comp.updatedAt) || undefined
+  };
+}
+
+function buildGuide(comp: SourceComp, catalogs: Pick<Catalogs, "championsById" | "itemNameById">): CompGuide {
+  const allTips = comp.tips ?? [];
   const mainChampion = comp.mainChampionId ? catalogs.championsById[comp.mainChampionId]?.name : null;
   const mainItem = comp.mainItemId ? catalogs.itemNameById[comp.mainItemId] : null;
   const sourceName = sourceDisplayName(comp.source);
@@ -1932,7 +2268,7 @@ function buildGuide(comp: SourceComp, contributors: SourceComp[], catalogs: Pick
           lines: compactLines([
             ...lateLines,
             comp.augmentsTip || null,
-            `Use this as the ${sourceName} published line, not a merged consensus build.`
+            `Use this as the ${sourceName} published line.`
           ])
         }
       ]
@@ -2048,11 +2384,13 @@ function buildUsedItemsById(usedItemIds: Set<string>, catalogs: Catalogs): Datas
   return itemsById;
 }
 
-function buildCompFromSourceComp(comp: SourceComp, catalogs: Catalogs): Comp {
+function buildCompFromSourceComp(comp: SourceComp, catalogs: Catalogs, capturedAt: string): Comp {
   const finalUnits = comp.finalUnits?.length ? comp.finalUnits : comp.units;
   const earlyUnits = comp.earlyUnits?.length ? comp.earlyUnits : fallbackEarlyUnits(finalUnits, catalogs);
-  const midUnits = fallbackMidUnits(earlyUnits, finalUnits, catalogs);
+  const midUnits = comp.midUnits?.length ? comp.midUnits : fallbackMidUnits(earlyUnits, finalUnits, catalogs);
   const providerName = sourceDisplayName(comp.source);
+  const sourceEvidence = buildProviderEvidence(comp, catalogs);
+  const sourceProvenance = buildProviderProvenance(comp, capturedAt);
   const augmentIds = Array.from(
     new Set(
       (comp.augments ?? [])
@@ -2071,7 +2409,9 @@ function buildCompFromSourceComp(comp: SourceComp, catalogs: Catalogs): Comp {
         url: comp.url,
         externalId: comp.externalId,
         tier: comp.tier,
-        confidence: 1
+        confidence: 1,
+        provenance: sourceProvenance,
+        evidence: sourceEvidence
       }
     ],
     phases: {
@@ -2080,7 +2420,7 @@ function buildCompFromSourceComp(comp: SourceComp, catalogs: Catalogs): Comp {
       late: unitsToPhaseData(finalUnits, catalogs)
     },
     recommendedAugmentIds: augmentIds,
-    guide: buildGuide(comp, [comp], catalogs),
+    guide: buildGuide(comp, catalogs),
     componentDemand: buildComponentDemand(finalUnits, catalogs),
     notes: `${providerName} provider build.`,
     teamCode: buildProviderTeamPlannerCode(comp, finalUnits, catalogs)
@@ -2151,6 +2491,7 @@ function dedupeCompIds(comps: Comp[]) {
 export async function buildDataset() {
   await ensureDirectory(PUBLIC_DATA_DIR);
   await ensureDirectory(PUBLIC_ASSETS_DIR);
+  const generatedAt = new Date().toISOString();
 
   const [cdragon, teamPlanner, mobalytics] = await Promise.all([
     fetchJson<CDragonTftData>(CDRAGON_TFT_URL),
@@ -2171,7 +2512,7 @@ export async function buildDataset() {
   ensureReferencedAugments(sourceComps, catalogs);
   const comps = dedupeCompIds(
     sourceComps
-      .map((comp) => buildCompFromSourceComp(comp, catalogs))
+      .map((comp) => buildCompFromSourceComp(comp, catalogs, generatedAt))
       .filter((comp) => comp.phases.late.championIds.length >= 3)
       .filter((comp) => comp.recommendedAugmentIds.length > 0)
       .sort((left, right) => {
@@ -2210,7 +2551,7 @@ export async function buildDataset() {
     meta: {
       schemaVersion: "1",
       set: CURRENT_SET,
-      generatedAt: new Date().toISOString(),
+      generatedAt,
       source: {
         comps: "provider-separated tftacademy + mobalytics + tftactics + tftflow with zero-augment builds rejected",
         champions: "communitydragon-latest-cdragon-tft",
@@ -2239,6 +2580,36 @@ export function validateDataset(dataset: Dataset) {
   const checkedDataset = datasetSchema.parse(dataset);
 
   for (const comp of checkedDataset.comps) {
+    if (comp.sources.length !== 1) {
+      problems.push(`${comp.title} must have exactly one provider source; merged provider builds are not allowed.`);
+    }
+
+    const source = comp.sources[0];
+    if (source) {
+      if (!source.provenance) {
+        problems.push(`${comp.title} is missing provider provenance.`);
+      } else {
+        if (source.provenance.provider !== source.name) {
+          problems.push(`${comp.title} provider provenance does not match source ${source.name}.`);
+        }
+        if (source.provenance.url !== source.url) {
+          problems.push(`${comp.title} provider provenance URL does not match source URL.`);
+        }
+      }
+
+      if (!source.evidence.length) {
+        problems.push(`${comp.title} is missing provider-native evidence.`);
+      } else {
+        const evidenceKinds = new Set(source.evidence.map((entry) => entry.kind));
+        if (!evidenceKinds.has("board")) {
+          problems.push(`${comp.title} provider-native evidence is missing board data.`);
+        }
+        if (!evidenceKinds.has("augment")) {
+          problems.push(`${comp.title} provider-native evidence is missing augment data.`);
+        }
+      }
+    }
+
     for (const phaseKey of ["early", "mid", "late"] as const) {
       const phase = comp.phases[phaseKey];
       if (phase.boardSlots.length !== 28) {

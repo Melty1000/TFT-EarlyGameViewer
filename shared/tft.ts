@@ -85,12 +85,48 @@ export const compGuideSchema = z.object({
   })
 });
 
+export const providerEvidenceKindSchema = z.enum([
+  "identity",
+  "rank",
+  "style",
+  "board",
+  "augment",
+  "augment-angle",
+  "guide",
+  "leveling",
+  "item",
+  "team-code",
+  "metadata"
+]);
+
+export const providerEvidencePhaseSchema = z.enum(["overview", "early", "mid", "late"]);
+
+export const providerEvidenceSchema = z.object({
+  kind: providerEvidenceKindSchema,
+  label: z.string().min(1),
+  value: z.string().min(1),
+  phase: providerEvidencePhaseSchema.optional(),
+  providerField: z.string().min(1).optional(),
+  confidence: z.number().min(0).max(1).optional()
+});
+
+export const providerProvenanceSchema = z.object({
+  provider: z.string().min(1),
+  url: z.string().url(),
+  externalId: z.string().optional(),
+  capturedAt: z.string().datetime(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional()
+});
+
 export const compSourceSchema = z.object({
   name: z.string().min(1),
   url: z.string().url(),
   externalId: z.string().optional(),
   tier: z.string().optional(),
-  confidence: z.number().min(0).max(1).optional()
+  confidence: z.number().min(0).max(1).optional(),
+  provenance: providerProvenanceSchema.optional(),
+  evidence: z.array(providerEvidenceSchema).default([])
 });
 
 export const compSchema = z.object({
@@ -140,6 +176,8 @@ export type SynergyBreakpoint = z.infer<typeof synergyBreakpointSchema>;
 export type Item = z.infer<typeof itemSchema>;
 export type GuideSection = z.infer<typeof guideSectionSchema>;
 export type CompGuide = z.infer<typeof compGuideSchema>;
+export type ProviderEvidence = z.infer<typeof providerEvidenceSchema>;
+export type ProviderProvenance = z.infer<typeof providerProvenanceSchema>;
 export type CompSource = z.infer<typeof compSourceSchema>;
 export type Comp = z.infer<typeof compSchema>;
 export type Dataset = z.infer<typeof datasetSchema>;

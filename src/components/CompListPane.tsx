@@ -8,18 +8,23 @@ import {
   getCompRankTags,
   getPlaystyleIcon,
   getPlaystyleLabel,
-  getRankIcon,
   getSourceAbbreviation,
   getSourceDisplayName
 } from "../lib/compMeta";
 import { type PhaseFilter } from "../lib/filters";
 import { DetailPane, type DetailTab, type InspectorTarget } from "./DetailPane";
+import { RankBadge } from "./RankBadge";
 
 type CompListPaneProps = {
   comps: Comp[];
   dataset: Dataset;
   phaseFilter: PhaseFilter;
   onQuickFilter: (label: string) => void;
+  selectedCompId?: string | null;
+  onSelectComp?: (compId: string) => void;
+  selectionOnly?: boolean;
+  lockSort?: boolean;
+  similarityReadouts?: Record<string, { score: number; percent: number }>;
 };
 
 type CompRow = {
@@ -41,13 +46,13 @@ const AUGMENT_TIER_ORDER: Record<string, number> = {
 };
 
 const RANK_SORT_ORDER: Record<string, number> = {
-  X: 0,
-  S: 1,
-  A: 2,
-  B: 3,
-  C: 4,
-  D: 5,
-  Unknown: 6
+  S: 0,
+  A: 1,
+  B: 2,
+  C: 3,
+  D: 4,
+  Unknown: 5,
+  X: 6
 };
 
 function buildCompRows(visibleComps: Comp[]): CompRow[] {
@@ -99,11 +104,13 @@ function compareRows(left: CompRow, right: CompRow, sortKey: SortKey) {
 function AnimatedChampionStrip({
   champions,
   label,
-  animate
+  animate,
+  compact = false
 }: {
   champions: Dataset["championsById"][string][];
   label: string;
   animate: boolean;
+  compact?: boolean;
 }) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
@@ -154,12 +161,9 @@ function AnimatedChampionStrip({
     >
       <div ref={trackRef} className="shortlist-icon-track" style={style}>
         {champions.map((champion, index) => (
-          <img
-            key={`${champion.id}-${index}`}
-            src={champion.icon}
-            alt={champion.name}
-            className={`comp-strip-icon cost-${champion.cost}`}
-          />
+          <span key={`${champion.id}-${index}`} className={compact ? "comp-strip-token compact" : "comp-strip-token"}>
+            <img src={champion.icon} alt={champion.name} className={`comp-strip-icon cost-${champion.cost}`} />
+          </span>
         ))}
       </div>
     </div>
@@ -168,10 +172,12 @@ function AnimatedChampionStrip({
 
 function AugmentPreviewStrip({
   comp,
-  dataset
+  dataset,
+  showLabels = false
 }: {
   comp: Comp;
   dataset: Dataset;
+  showLabels?: boolean;
 }) {
   const previewAugments = comp.recommendedAugmentIds
     .map((augmentId, index) => ({ augmentId, index, augment: dataset.augmentsById[augmentId] }))
@@ -195,6 +201,7 @@ function AugmentPreviewStrip({
           title={`${augment.name} (${augment.tier})`}
         >
           <img src={augment.icon} alt={augment.name} className="preview-token-icon" />
+          {showLabels ? <span className="preview-token-label">{augment.name}</span> : null}
           <span className="preview-token-badge">{augment.tier}</span>
         </div>
       ))}
@@ -202,7 +209,7 @@ function AugmentPreviewStrip({
   );
 }
 
-function ComponentDemandStrip({ comp }: { comp: Comp }) {
+function ComponentDemandStrip({ comp, showLabels = false }: { comp: Comp; showLabels?: boolean }) {
   return (
     <div className="row-component-demand">
       {comp.componentDemand.slice(0, 4).map((component) => (
@@ -217,6 +224,7 @@ function ComponentDemandStrip({ comp }: { comp: Comp }) {
             alt={component.label}
             className="preview-token-icon component-token-icon"
           />
+          {showLabels ? <span className="preview-token-label">{component.label}</span> : null}
           <span className="preview-token-badge">{component.count}</span>
         </span>
       ))}
@@ -226,11 +234,13 @@ function ComponentDemandStrip({ comp }: { comp: Comp }) {
 
 function SourceCell({ comp }: { comp: Comp }) {
   const sourceName = comp.sources[0]?.name ?? "source";
+  const evidenceCount = comp.sources[0]?.evidence.length ?? 0;
 
   return (
     <div className="source-cell-label" title={getSourceDisplayName(sourceName)}>
       <span className="source-code">{getSourceAbbreviation(sourceName)}</span>
       <span className="source-full">{getSourceDisplayName(sourceName)}</span>
+      <span className="source-evidence-count">{evidenceCount ? `${evidenceCount} signals` : "no evidence"}</span>
     </div>
   );
 }
@@ -242,29 +252,99 @@ function RankCell({ comp }: { comp: Comp }) {
     return <span className="rank-empty">--</span>;
   }
 
-  return (
-    <span
-      className={`rank-chip rank-${rank.tier.toLowerCase()}`}
-      title={rank.label}
-      aria-label={`Build rank ${rank.label}`}
-    >
-      <img src={getRankIcon(rank.tier)} alt="" className="rank-icon" aria-hidden="true" />
-    </span>
-  );
+  return <RankBadge tier={rank.tier} label={rank.label} />;
+}
+
+function isRollPlaystyle(playstyle: string | null) {
+  const normalized = playstyle?.toLowerCase() ?? "";
+  return normalized.includes("reroll") || normalized.includes("slow");
+}
+
+function getStyleCode(playstyle: string | null, label: string | null, usesRollIcon: boolean) {
+  const source = `${label ?? ""} ${playstyle ?? ""}`.trim();
+  const normalized = source.toLowerCase();
+  const costMatch =
+    normalized.match(/\b([1-9]\d*)\s*[- ]?\s*cost\b/) ?? normalized.match(/\b([1-9]\d*)c\b/);
+  const levelMatch =
+    normalized.match(/\b(?:level|lvl|l)\s*(\d+)\b/) ??
+    normalized.match(/\bfast\s*(\d+)\b/) ??
+    normalized.match(/\b(\d+)\b/);
+
+  if (costMatch) {
+    return `${costMatch[1]}C`;
+  }
+
+  if (levelMatch) {
+    return levelMatch ? `L${levelMatch[1]}` : "LV";
+  }
+
+  if (usesRollIcon) {
+    return "RR";
+  }
+
+  if (normalized.includes("tempo")) {
+    return "TP";
+  }
+
+  if (normalized.includes("flex")) {
+    return "FX";
+  }
+
+  const tokenCode = (label ?? playstyle ?? "--")
+    .split(/[^a-z0-9]+/i)
+    .filter(Boolean)
+    .map((token) => token[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  return tokenCode || "--";
 }
 
 function StyleCell({ playstyle }: { playstyle: string | null }) {
+  const usesRollIcon = isRollPlaystyle(playstyle);
   const icon = getPlaystyleIcon(playstyle);
   const label = getPlaystyleLabel(playstyle);
+  const styleCode = getStyleCode(playstyle, label, usesRollIcon);
+  const hasVisualIcon = Boolean(icon);
+  const iconStyle = icon
+    ? ({
+        "--style-icon-url": `url("${icon}")`
+      } as CSSProperties)
+    : undefined;
+
   return (
-    <span className={icon ? "style-cell-text with-icon" : "style-cell-text"} title={playstyle ?? undefined}>
-      {icon ? <img src={icon} alt="" className="style-cell-icon" /> : null}
-      {label ?? "--"}
+    <span
+      className={usesRollIcon ? "style-cell-text custom-style-badge with-icon" : "style-cell-text custom-style-badge"}
+      title={playstyle ?? undefined}
+      data-style-code={styleCode}
+    >
+      <span className="style-glyph" aria-hidden="true">
+        {icon ? (
+          <span
+            className={usesRollIcon ? "style-cell-icon style-cell-roll-icon" : "style-cell-icon"}
+            style={iconStyle}
+          />
+        ) : null}
+        {!hasVisualIcon ? <strong>{styleCode}</strong> : null}
+      </span>
+      {hasVisualIcon ? <span className="style-code">{styleCode}</span> : null}
+      <span className="style-cell-label">{label ?? "--"}</span>
     </span>
   );
 }
 
-export function CompListPane({ comps, dataset, phaseFilter, onQuickFilter }: CompListPaneProps) {
+export function CompListPane({
+  comps,
+  dataset,
+  phaseFilter,
+  onQuickFilter,
+  selectedCompId = null,
+  onSelectComp,
+  selectionOnly = false,
+  lockSort = false,
+  similarityReadouts = {}
+}: CompListPaneProps) {
   const rows = useMemo(() => buildCompRows(comps), [comps]);
   const [expandedCompIds, setExpandedCompIds] = useState<string[]>([]);
   const [selectedTabs, setSelectedTabs] = useState<Record<string, DetailTab>>({});
@@ -282,9 +362,14 @@ export function CompListPane({ comps, dataset, phaseFilter, onQuickFilter }: Com
 
   const previewPhase = getPreviewPhase(phaseFilter);
   const sortedRows = useMemo(() => {
+    if (lockSort) {
+      return rows;
+    }
+
     const nextRows = [...rows].sort((left, right) => compareRows(left, right, sortKey));
     return sortDirection === "desc" ? nextRows.reverse() : nextRows;
-  }, [rows, sortDirection, sortKey]);
+  }, [lockSort, rows, sortDirection, sortKey]);
+  const usesSelectionMode = selectionOnly || Boolean(onSelectComp);
 
   const changeSort = (nextSortKey: SortKey) => {
     setSortKey((currentSortKey) => {
@@ -319,48 +404,112 @@ export function CompListPane({ comps, dataset, phaseFilter, onQuickFilter }: Com
     });
   };
 
+  const activateRow = (compId: string) => {
+    if (usesSelectionMode) {
+      onSelectComp?.(compId);
+      return;
+    }
+
+    toggleExpanded(compId);
+  };
+
   return (
-    <section className="comp-list-shell">
-      <div className="list-columns">
-        <button
-          type="button"
-          className={sortKey === "source" ? "column-sort-button active" : "column-sort-button"}
-          aria-label="Sort by source"
-          aria-sort={sortKey === "source" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
-          onClick={() => changeSort("source")}
-        >
-          Source
-        </button>
-        <button
-          type="button"
-          className={sortKey === "rank" ? "column-sort-button active" : "column-sort-button"}
-          aria-label="Sort by rank"
-          aria-sort={sortKey === "rank" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
-          onClick={() => changeSort("rank")}
-        >
-          Rank
-        </button>
-        <button
-          type="button"
-          className={sortKey === "style" ? "column-sort-button active" : "column-sort-button"}
-          aria-label="Sort by style"
-          aria-sort={sortKey === "style" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
-          onClick={() => changeSort("style")}
-        >
-          Style
-        </button>
-        <button
-          type="button"
-          className={sortKey === "name" ? "column-sort-button active" : "column-sort-button"}
-          aria-label="Sort by comp name"
-          aria-sort={sortKey === "name" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
-          onClick={() => changeSort("name")}
-        >
-          Composition
-        </button>
-        <div>Champions</div>
-        <div>Augments</div>
-        <div>Components</div>
+    <section className={usesSelectionMode ? "comp-list-shell selection-mode" : "comp-list-shell"}>
+      <div className={usesSelectionMode ? "list-columns selection-list-columns" : "list-columns"}>
+        {usesSelectionMode ? (
+          <>
+            <span className="selection-header-latch" aria-hidden="true" />
+            <button
+              type="button"
+              className={sortKey === "rank" ? "column-sort-button active" : "column-sort-button"}
+              aria-label="Sort by rank"
+              aria-sort={sortKey === "rank" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
+              onClick={() => changeSort("rank")}
+            >
+              Rank
+            </button>
+            <div className="selection-build-header">
+              <button
+                type="button"
+                className={sortKey === "source" ? "column-sort-button active" : "column-sort-button"}
+                aria-label="Sort by source"
+                aria-sort={sortKey === "source" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
+                onClick={() => changeSort("source")}
+              >
+                Source
+              </button>
+              <button
+                type="button"
+                className={sortKey === "name" ? "column-sort-button active" : "column-sort-button"}
+                aria-label="Sort by comp name"
+                aria-sort={sortKey === "name" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
+                onClick={() => changeSort("name")}
+              >
+                Build
+              </button>
+              <button
+                type="button"
+                className={sortKey === "style" ? "column-sort-button active" : "column-sort-button"}
+                aria-label="Sort by style"
+                aria-sort={sortKey === "style" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
+                onClick={() => changeSort("style")}
+              >
+                Style
+              </button>
+            </div>
+            <div className="selection-static-column selection-preview-header" data-preview-column="champions">
+              Champions
+            </div>
+            <div className="selection-static-column selection-preview-header" data-preview-column="augments">
+              Augments
+            </div>
+            <div className="selection-static-column selection-preview-header" data-preview-column="components">
+              Components
+            </div>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className={sortKey === "source" ? "column-sort-button active" : "column-sort-button"}
+              aria-label="Sort by source"
+              aria-sort={sortKey === "source" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
+              onClick={() => changeSort("source")}
+            >
+              Source
+            </button>
+            <button
+              type="button"
+              className={sortKey === "rank" ? "column-sort-button active" : "column-sort-button"}
+              aria-label="Sort by rank"
+              aria-sort={sortKey === "rank" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
+              onClick={() => changeSort("rank")}
+            >
+              Rank
+            </button>
+            <button
+              type="button"
+              className={sortKey === "style" ? "column-sort-button active" : "column-sort-button"}
+              aria-label="Sort by style"
+              aria-sort={sortKey === "style" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
+              onClick={() => changeSort("style")}
+            >
+              Style
+            </button>
+            <button
+              type="button"
+              className={sortKey === "name" ? "column-sort-button active" : "column-sort-button"}
+              aria-label="Sort by comp name"
+              aria-sort={sortKey === "name" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
+              onClick={() => changeSort("name")}
+            >
+              Composition
+            </button>
+            <div>Champions</div>
+            <div>Augments</div>
+            <div>Components</div>
+          </>
+        )}
       </div>
 
       <div className="comp-list-body">
@@ -379,66 +528,127 @@ export function CompListPane({ comps, dataset, phaseFilter, onQuickFilter }: Com
             .map((championId) => dataset.championsById[championId])
             .filter(Boolean);
           const playstyle = getCompPlaystyle(comp);
-          const isExpanded = expandedCompIds.includes(row.key);
+          const isExpanded = usesSelectionMode ? false : expandedCompIds.includes(row.key);
+          const isSelected = selectedCompId === row.key;
           const selectedTab = selectedTabs[row.key] ?? getDefaultDetailTab(phaseFilter);
           const activePhase = activePhases[row.key] ?? getDefaultBoardPhase(phaseFilter);
           const liveInspector = liveInspectors[row.key] ?? null;
           const lockedInspector = lockedInspectors[row.key] ?? null;
+          const sourceName = comp.sources[0]?.name ?? "source";
+          const sourceDisplayName = getSourceDisplayName(sourceName);
+          const evidenceCount = comp.sources[0]?.evidence.length ?? 0;
+          const similarityReadout = similarityReadouts[comp.id];
 
           return (
             <article
               key={row.key}
-              className={isExpanded ? "comp-row expanded" : "comp-row"}
+              className={[
+                "comp-row",
+                isExpanded ? "expanded" : "",
+                isSelected ? "is-selected" : "",
+                usesSelectionMode ? "selection-mode" : ""
+              ]
+                .filter(Boolean)
+                .join(" ")}
               data-comp-id={comp.id}
+              aria-selected={usesSelectionMode ? isSelected : undefined}
             >
               <div
                 role="button"
                 tabIndex={0}
                 className="row-header-trigger"
-                aria-expanded={isExpanded}
-                aria-label={`Toggle comp ${row.title}`}
-                onClick={() => toggleExpanded(row.key)}
+                aria-expanded={usesSelectionMode ? undefined : isExpanded}
+                aria-label={usesSelectionMode ? `Select comp ${row.title}` : `Toggle comp ${row.title}`}
+                onClick={() => activateRow(row.key)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    toggleExpanded(row.key);
+                    activateRow(row.key);
                   }
                 }}
               >
-                <div className="source-cell" data-testid="source-cell">
-                  <SourceCell comp={comp} />
-                </div>
+                {usesSelectionMode ? (
+                  <>
+                    <span className="row-active-latch" aria-hidden="true" />
 
-                <div className="rank-cell" data-testid="rank-cell">
-                  <RankCell comp={comp} />
-                </div>
+                    <div className="rank-cell selection-rank-cell" data-testid="rank-cell">
+                      <RankCell comp={comp} />
+                    </div>
 
-                <div className="style-cell" data-testid="style-cell">
-                  <StyleCell playstyle={playstyle} />
-                </div>
+                    <div className="row-name selection-composition-cell" data-testid="composition-cell">
+                      <div className="selection-row-meta">
+                        <span className="selection-source-readout" title={sourceDisplayName}>
+                          [ {sourceDisplayName} ]
+                        </span>
+                        <span>[ {previewPhase} / {previewChampions.length} ]</span>
+                        <span>[ {evidenceCount} evidence ]</span>
+                        {similarityReadout ? <strong>[ SIM {similarityReadout.score} / {similarityReadout.percent}% ]</strong> : null}
+                        {isSelected ? <strong>[ ACTIVE ]</strong> : null}
+                      </div>
+                      <h2>{row.title}</h2>
+                      <div className="selection-style-readout">
+                        <StyleCell playstyle={playstyle} />
+                      </div>
+                    </div>
 
-                <div className="row-name" data-testid="composition-cell">
-                  <h2>{row.title}</h2>
-                </div>
+                    <div
+                      className="champions-cell selection-formation-cell selection-preview-cell"
+                      data-preview-column="champions"
+                    >
+                      <AnimatedChampionStrip
+                        champions={previewChampions}
+                        label={`${row.title} ${previewPhase} champions`}
+                        animate={isExpanded}
+                        compact
+                      />
+                    </div>
 
-                <div className="champions-cell">
-                  <AnimatedChampionStrip
-                    champions={previewChampions}
-                    label={`${row.title} ${previewPhase} champions`}
-                    animate={isExpanded}
-                  />
-                </div>
+                    <div className="augments-cell selection-token-cell selection-preview-cell" data-preview-column="augments">
+                      <AugmentPreviewStrip comp={comp} dataset={dataset} />
+                    </div>
 
-                <div className="augments-cell">
-                  <AugmentPreviewStrip comp={comp} dataset={dataset} />
-                </div>
+                    <div className="components-cell selection-token-cell selection-preview-cell" data-preview-column="components">
+                      <ComponentDemandStrip comp={comp} />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="source-cell" data-testid="source-cell">
+                      <SourceCell comp={comp} />
+                    </div>
 
-                <div className="components-cell">
-                  <ComponentDemandStrip comp={comp} />
-                </div>
+                    <div className="rank-cell" data-testid="rank-cell">
+                      <RankCell comp={comp} />
+                    </div>
+
+                    <div className="style-cell" data-testid="style-cell">
+                      <StyleCell playstyle={playstyle} />
+                    </div>
+
+                    <div className="row-name" data-testid="composition-cell">
+                      <h2>{row.title}</h2>
+                    </div>
+
+                    <div className="champions-cell">
+                      <AnimatedChampionStrip
+                        champions={previewChampions}
+                        label={`${row.title} ${previewPhase} champions`}
+                        animate={isExpanded}
+                      />
+                    </div>
+
+                    <div className="augments-cell">
+                      <AugmentPreviewStrip comp={comp} dataset={dataset} />
+                    </div>
+
+                    <div className="components-cell">
+                      <ComponentDemandStrip comp={comp} />
+                    </div>
+                  </>
+                )}
               </div>
 
-              {isExpanded ? (
+              {!usesSelectionMode && isExpanded ? (
                 <div className="row-detail-shell">
                   <DetailPane
                     comp={comp}
