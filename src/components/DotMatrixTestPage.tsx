@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { PhaseKey } from "../../shared/normalization";
 import { COMPONENT_LABELS, PHASES } from "../../shared/normalization";
-import type { Comp, Dataset, GuideSection } from "../../shared/tft";
-import { CompListPane } from "./CompListPane";
+import type { Comp, Dataset } from "../../shared/tft";
+import { CompListPane, getInitialCompListSelection } from "./CompListPane";
 import {
   buildInspectorModel,
   LevellingGuideContent,
@@ -24,6 +24,11 @@ import {
   getSourceDisplayName
 } from "../lib/compMeta";
 import { compMatchesFilters, type PhaseFilter } from "../lib/filters";
+import {
+  getCompletedItemRecipeGroups,
+  getDetailPanelGuideGroups,
+  getLevellingGuideSection
+} from "../lib/detailPanelContent";
 import { rankCompsBySimilarity, type SimilaritySelection } from "../lib/similarity";
 import { PANEL_REGISTRY } from "../lib/panelRegistry";
 import { useDataset } from "../lib/useDataset";
@@ -86,10 +91,10 @@ type SimilarityEntityOption = {
 function getDotPalette(themeMode: "dark" | "light"): DotPalette {
   if (themeMode === "light") {
     return {
-      background: "#ffffff",
+      background: "#f3f4ed",
       base: [18, 18, 18],
       accent: [242, 98, 44],
-      flash: [255, 255, 255]
+      flash: [247, 247, 242]
     };
   }
 
@@ -97,7 +102,7 @@ function getDotPalette(themeMode: "dark" | "light"): DotPalette {
     background: "#08090d",
     base: [244, 244, 244],
     accent: [217, 249, 51],
-    flash: [255, 255, 255]
+    flash: [247, 247, 247]
   };
 }
 
@@ -262,7 +267,14 @@ export function DotMatrixTestPage() {
       (result) => result.score > 0
     );
   }, [data, filteredComps, selectedBuildPhase, similaritySelection, similaritySelectionCount]);
-  const browserComps = similaritySelectionCount ? similarityResults.map((result) => result.comp) : filteredComps;
+  const browserComps = useMemo(
+    () => (similaritySelectionCount ? similarityResults.map((result) => result.comp) : filteredComps),
+    [filteredComps, similarityResults, similaritySelectionCount]
+  );
+  const initialVisibleCompId = useMemo(
+    () => getInitialCompListSelection(browserComps, similaritySelectionCount > 0),
+    [browserComps, similaritySelectionCount]
+  );
   const similarityReadouts = useMemo(
     () =>
       similarityResults.reduce<Record<string, { score: number; percent: number }>>((readouts, result) => {
@@ -282,6 +294,23 @@ export function DotMatrixTestPage() {
 
     return data.comps.find((comp) => comp.id === selectedCompId) ?? null;
   }, [data, selectedCompId]);
+
+  useEffect(() => {
+    const selectedStillVisible = selectedCompId ? browserComps.some((comp) => comp.id === selectedCompId) : false;
+    if (selectedStillVisible) {
+      return;
+    }
+
+    const nextSelectedId = initialVisibleCompId;
+    if (nextSelectedId === selectedCompId) {
+      return;
+    }
+
+    setSelectedCompId(nextSelectedId);
+    setInspector(null);
+    setLockedInspector(null);
+    setCopyState("idle");
+  }, [browserComps, initialVisibleCompId, selectedCompId]);
 
   const activeInspector = selectedComp && data
     ? buildInspectorModel(selectedComp, data, selectedBuildPhase, lockedInspector ?? inspector)
@@ -743,7 +772,6 @@ export function DotMatrixTestPage() {
                   onQuickFilter={addChip}
                   selectedCompId={selectedCompId}
                   onSelectComp={handleSelectComp}
-                  lockSort={similaritySelectionCount > 0}
                   similarityReadouts={similarityReadouts}
                   selectionOnly
                 />
@@ -776,7 +804,12 @@ export function DotMatrixTestPage() {
         </DotTestDraggablePanel>
 
         <DotTestDraggablePanel id="selectedOverview" draggablePanels={draggablePanels}>
-          <OverviewPanel selectedComp={selectedComp} copyState={copyState} onCopyTeamCode={copySelectedTeamCode} />
+          <OverviewPanel
+            selectedComp={selectedComp}
+            selectedBuildPhase={selectedBuildPhase}
+            copyState={copyState}
+            onCopyTeamCode={copySelectedTeamCode}
+          />
         </DotTestDraggablePanel>
 
         <DotTestDraggablePanel id="selectedBoard" draggablePanels={draggablePanels}>
@@ -1187,32 +1220,26 @@ function getSourceReadout(comp: Comp) {
   };
 }
 
-function getProviderEvidencePreview(comp: Comp) {
-  const priority = ["rank", "style", "board", "augment", "augment-angle", "guide", "leveling", "item", "team-code"];
-  return (comp.sources[0]?.evidence ?? [])
-    .slice()
-    .sort((left, right) => {
-      const leftPriority = priority.indexOf(left.kind);
-      const rightPriority = priority.indexOf(right.kind);
-      return (leftPriority === -1 ? 99 : leftPriority) - (rightPriority === -1 ? 99 : rightPriority);
-    })
-    .slice(0, 8);
-}
-
 function withoutGuidePrefix(line: string) {
-  return line.replace(/^(?:Primary unit|Source|Comfortable line):\s*/i, "").trim();
+  return line
+    .replace(/^(?:Primary unit|Source|Comfortable line):\s*/i, "")
+    .replace(/\.$/, "")
+    .trim();
 }
 
-function isAngleLine(line: string) {
-  return /\baugment angle\b/i.test(line);
+function getUsefulProviderNote(comp: Comp) {
+  const note = comp.notes?.trim();
+  return note && !/provider build\.?$/i.test(note) ? note : null;
 }
 
 function OverviewPanel({
   selectedComp,
+  selectedBuildPhase,
   copyState,
   onCopyTeamCode
 }: {
   selectedComp: Comp | null;
+  selectedBuildPhase: PhaseKey;
   copyState: "idle" | "copied" | "error";
   onCopyTeamCode: () => void;
 }) {
@@ -1225,17 +1252,17 @@ function OverviewPanel({
   const playstyleIcon = getPlaystyleIcon(playstyle);
   const playstyleLabel = getPlaystyleLabel(playstyle);
   const { source, sourceLabel, sourceCode } = getSourceReadout(selectedComp);
-  const generalInfo = getGuideSection(selectedComp, "General info");
+  const guideGroups = getDetailPanelGuideGroups(selectedComp, selectedBuildPhase);
+  const generalInfo = guideGroups.overview.find((section) => section.title.toLowerCase() === "general info") ?? null;
   const whenToMake = getGuideSection(selectedComp, "When to make");
   const primaryUnit = generalInfo?.lines.find((line) => /^Primary unit:/i.test(line));
-  const sourceLine = generalInfo?.lines.find((line) => /^Source:/i.test(line));
+  const secondaryReadout = primaryUnit
+    ? { label: "Primary", value: withoutGuidePrefix(primaryUnit) }
+    : { label: "Augments", value: `${selectedComp.recommendedAugmentIds.length} recs` };
   const summaryLines =
-    generalInfo?.lines.filter((line) => !/^Primary unit:/i.test(line) && !/^Source:/i.test(line)).slice(0, 2) ?? [];
-  const angleLines = whenToMake?.lines.filter(isAngleLine) ?? [];
+    generalInfo?.lines.filter((line) => !/^Primary unit:/i.test(line) && !/^Source:/i.test(line)).slice(0, 1) ?? [];
   const comfortableLine = whenToMake?.lines.find((line) => /^Comfortable line:/i.test(line));
-  const whenNotes =
-    whenToMake?.lines.filter((line) => !isAngleLine(line) && !/^Comfortable line:/i.test(line)).slice(0, 1) ?? [];
-  const providerEvidence = getProviderEvidencePreview(selectedComp);
+  const providerNote = getUsefulProviderNote(selectedComp);
 
   return (
     <div className="dot-test-overview-grid">
@@ -1263,8 +1290,8 @@ function OverviewPanel({
           <strong>{sourceCode}</strong>
         </span>
         <span>
-          Primary
-          <strong>{primaryUnit ? withoutGuidePrefix(primaryUnit) : "unknown"}</strong>
+          {secondaryReadout.label}
+          <strong>{secondaryReadout.value}</strong>
         </span>
         <span>
           Line
@@ -1282,48 +1309,16 @@ function OverviewPanel({
       {summaryLines.length ? (
         <div className="dot-test-overview-section">
           <span>General info</span>
-          {summaryLines.map((line) => (
-            <p key={line}>{line}</p>
+          {summaryLines.map((line, index) => (
+            <p key={`${index}-${line}`}>{line}</p>
           ))}
         </div>
       ) : null}
 
-      {angleLines.length || whenNotes.length ? (
-        <div className="dot-test-overview-section">
-          <span>When to make</span>
-          {angleLines.length ? (
-            <div className="dot-test-overview-tags">
-              {angleLines.map((line) => (
-                <strong key={line}>[ {line.replace(/\s+angle$/i, "")} ]</strong>
-              ))}
-            </div>
-          ) : null}
-          {whenNotes.map((line) => (
-            <p key={line}>{line}</p>
-          ))}
-        </div>
-      ) : null}
-
-      {sourceLine || selectedComp.notes ? (
+      {providerNote ? (
         <div className="dot-test-overview-section compact">
           <span>Provider note</span>
-          {sourceLine ? <p>{sourceLine}</p> : null}
-          {selectedComp.notes ? <p>{selectedComp.notes}</p> : null}
-        </div>
-      ) : null}
-
-      {providerEvidence.length ? (
-        <div className="dot-test-overview-section compact dot-test-provider-evidence">
-          <span>Provider-native evidence</span>
-          <div className="dot-test-evidence-list">
-            {providerEvidence.map((entry, index) => (
-              <div key={`${entry.kind}-${entry.providerField}-${index}`} className="dot-test-evidence-row">
-                <strong>{entry.kind}</strong>
-                <span>{entry.label}</span>
-                <p>{entry.value}</p>
-              </div>
-            ))}
-          </div>
+          <p>{providerNote}</p>
         </div>
       ) : null}
 
@@ -1561,12 +1556,8 @@ function GamePlanPanel({ selectedComp, selectedBuildPhase }: { selectedComp: Com
     return <EmptyPanelState />;
   }
 
-  const howToPlay = getGuideSection(selectedComp, "How to play");
-  const stageLines = howToPlay?.lines.filter((line) => !/^Style:/i.test(line)) ?? [];
-  const phaseSections = selectedComp.guide.phases[selectedBuildPhase].filter(
-    (section) => !section.title.toLowerCase().includes("level")
-  );
-  const noteCount = stageLines.length + phaseSections.reduce((count, section) => count + section.lines.length, 0);
+  const { gamePlan } = getDetailPanelGuideGroups(selectedComp, selectedBuildPhase);
+  const noteCount = gamePlan.reduce((count, section) => count + section.lines.length, 0);
 
   if (!noteCount) {
     return <EmptyPanelState label="No game plan notes" />;
@@ -1579,23 +1570,12 @@ function GamePlanPanel({ selectedComp, selectedBuildPhase }: { selectedComp: Com
         <strong>{noteCount} notes</strong>
       </div>
       <div className="dot-test-guide-section-list">
-        {stageLines.length ? (
-          <section className="dot-test-guide-section">
-            <h3>How to play</h3>
-            <div className="dot-test-guide-lines">
-              {stageLines.map((line) => (
-                <p key={line}>{line}</p>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {phaseSections.map((section) => (
+        {gamePlan.map((section) => (
           <section key={`${selectedBuildPhase}-${section.title}`} className="dot-test-guide-section">
             <h3>{section.title}</h3>
             <div className="dot-test-guide-lines">
-              {section.lines.map((line) => (
-                <p key={line}>{line}</p>
+              {section.lines.map((line, index) => (
+                <p key={`${section.title}-${index}-${line}`}>{line}</p>
               ))}
             </div>
           </section>
@@ -1603,18 +1583,6 @@ function GamePlanPanel({ selectedComp, selectedBuildPhase }: { selectedComp: Com
       </div>
     </div>
   );
-}
-
-function getPhaseItemCounts(comp: Comp, selectedBuildPhase: PhaseKey) {
-  const itemCounts = new Map<string, number>();
-
-  for (const slot of comp.phases[selectedBuildPhase].boardSlots) {
-    for (const itemId of slot.itemIds ?? []) {
-      itemCounts.set(itemId, (itemCounts.get(itemId) ?? 0) + 1);
-    }
-  }
-
-  return Array.from(itemCounts.entries()).map(([id, count]) => ({ id, count }));
 }
 
 function ComponentsPanel({
@@ -1636,7 +1604,7 @@ function ComponentsPanel({
     return <EmptyPanelState />;
   }
 
-  const completedItems = getPhaseItemCounts(selectedComp, selectedBuildPhase);
+  const completedItems = getCompletedItemRecipeGroups(selectedComp, dataset, selectedBuildPhase);
 
   if (!selectedComp.componentDemand.length && !completedItems.length) {
     return <EmptyPanelState label="No item data" />;
@@ -1646,65 +1614,80 @@ function ComponentsPanel({
     <div className="dot-test-components-panel">
       <div className="dot-test-board-meta dot-test-components-meta">
         <span>{selectedBuildPhase} item read</span>
-        <strong>{selectedComp.componentDemand.length} components</strong>
+        <strong>
+          {selectedComp.componentDemand.length} comps / {completedItems.length} items
+        </strong>
       </div>
 
-      {selectedComp.componentDemand.length ? (
-        <section className="dot-test-item-section">
-          <h3>Component demand</h3>
-          <div className="dot-test-item-token-grid">
-            {selectedComp.componentDemand.map((component) => (
-              <button
-                key={component.componentId}
-                type="button"
-                className="dot-test-item-token"
-                title={`${component.count}x ${component.label}`}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onQuickFilter(component.label);
-                }}
-              >
-                <img src={`${import.meta.env.BASE_URL}assets/items/${component.componentId}.png`} alt={component.label} />
-                <span>{component.label}</span>
-                <strong>{component.count}</strong>
-              </button>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      <div className="dot-test-item-section-list">
+        {completedItems.length ? (
+          <section className="dot-test-item-section dot-test-completed-item-section">
+            <h3>Completed items</h3>
+            <div className="dot-test-completed-item-grid">
+              {completedItems.map(({ item, count, recipe }) => {
+                const recipeLabel = recipe.length ? ` Recipe: ${recipe.map((component) => component.name).join(" + ")}` : "";
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="dot-test-completed-item-card"
+                    title={`${item.name} - click to pin, right-click to filter.${recipeLabel}`}
+                    onMouseEnter={() => onHoverItem(item.id)}
+                    onMouseLeave={() => onHoverItem(null)}
+                    onClick={() => onToggleLock({ kind: "item", id: item.id })}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onQuickFilter(item.name);
+                    }}
+                  >
+                    <span className="dot-test-item-token-main">
+                      <img src={item.icon} alt={item.name} />
+                      <span>{item.name}</span>
+                      <strong>{count}</strong>
+                    </span>
+                    {recipe.length ? (
+                      <span className="dot-test-item-recipe-row" aria-label={`${item.name} recipe`}>
+                        {recipe.map((component, index) => (
+                          <span key={`${component.id}-${index}`} className="dot-test-recipe-chip">
+                            <img src={component.icon} alt="" aria-hidden="true" />
+                            <span>{component.name}</span>
+                          </span>
+                        ))}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
 
-      {completedItems.length ? (
-        <section className="dot-test-item-section">
-          <h3>Completed items</h3>
-          <div className="dot-test-item-token-grid">
-            {completedItems.map(({ id, count }) => {
-              const item = dataset.itemsById[id];
-              const itemName = item?.name ?? id;
-              return (
+        {selectedComp.componentDemand.length ? (
+          <section className="dot-test-item-section dot-test-component-demand-section">
+            <h3>Component demand</h3>
+            <div className="dot-test-item-token-grid">
+              {selectedComp.componentDemand.map((component) => (
                 <button
-                  key={id}
+                  key={component.componentId}
                   type="button"
                   className="dot-test-item-token"
-                  title={`${itemName} - click to pin, right-click to filter`}
-                  onMouseEnter={() => onHoverItem(id)}
-                  onMouseLeave={() => onHoverItem(null)}
-                  onClick={() => onToggleLock({ kind: "item", id })}
+                  title={`${component.count}x ${component.label}`}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
-                    onQuickFilter(itemName);
+                    onQuickFilter(component.label);
                   }}
                 >
-                  {item?.icon ? <img src={item.icon} alt={itemName} /> : <span className="dot-test-token-fallback" />}
-                  <span>{itemName}</span>
-                  <strong>{count}</strong>
+                  <img src={`${import.meta.env.BASE_URL}assets/items/${component.componentId}.png`} alt={component.label} />
+                  <span>{component.label}</span>
+                  <strong>{component.count}</strong>
                 </button>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
+              ))}
+            </div>
+          </section>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -1906,21 +1889,12 @@ function SimilaritiesPanel({
   );
 }
 
-function getLevellingSection(comp: Comp, phase: PhaseKey): GuideSection | null {
-  const sections = [...comp.guide.overview, ...comp.guide.phases[phase]];
-  return (
-    sections.find((section) => section.title.toLowerCase() === "levelling guide") ??
-    sections.find((section) => section.title.toLowerCase().includes("level")) ??
-    null
-  );
-}
-
 function LevellingGuidePanel({ selectedComp, selectedBuildPhase }: { selectedComp: Comp | null; selectedBuildPhase: PhaseKey }) {
   if (!selectedComp) {
     return <EmptyPanelState />;
   }
 
-  const section = getLevellingSection(selectedComp, selectedBuildPhase);
+  const section = getLevellingGuideSection(selectedComp, selectedBuildPhase);
   if (!section) {
     return <EmptyPanelState label="No levelling notes" />;
   }

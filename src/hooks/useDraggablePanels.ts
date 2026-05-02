@@ -24,6 +24,7 @@ export type PanelLayout = Record<DraggablePanelId, PanelLayoutEntry>;
 export type ResizeHandle = "left" | "right" | "top" | "bottom" | "corner";
 
 const PANEL_STORAGE_KEY = "opnr:aptos-panel-layout:v1";
+const PANEL_LIVE_LAYOUT_EVENT = "opnr:aptos-panel-live-layout";
 const PANEL_DRAG_SURFACE_SELECTOR = "[data-panel-drag-surface]";
 const PANEL_COLLAPSE_BUTTON_SELECTOR = ".dot-test-panel-collapse-button, .aptos-panel-collapse-button";
 const PANEL_CHROME_CONTROL_SELECTOR = [
@@ -315,9 +316,23 @@ function setPanelTransform(panel: HTMLElement, offset: PanelOffset) {
   panel.style.transform = offset.x || offset.y ? `translate3d(${offset.x}px, ${offset.y}px, 0)` : "";
 }
 
+function reportLivePanelLayout(panel: HTMLElement, layout: PanelLayoutEntry) {
+  const id = panel.dataset.panelId;
+  if (!id || !isPanelId(id)) {
+    return;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent(PANEL_LIVE_LAYOUT_EVENT, {
+      detail: { id, layout }
+    })
+  );
+}
+
 function setPanelSize(panel: HTMLElement, layout: PanelLayoutEntry) {
   panel.style.width = layout.width ? `${layout.width}px` : "";
   panel.style.height = layout.height ? `${layout.height}px` : "";
+  reportLivePanelLayout(panel, layout);
 }
 
 function getCssAnchorValue(panel: HTMLElement, id: DraggablePanelId, edge: "left" | "right" | "top" | "bottom") {

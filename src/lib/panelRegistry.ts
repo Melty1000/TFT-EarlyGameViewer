@@ -117,7 +117,7 @@ export const PANEL_REGISTRY: Record<DraggablePanelId, PanelRegistryEntry> = {
     debugLayout: {
       width: 340,
       height: 232,
-      top: 250,
+      top: 366,
       left: "auto",
       right: 22,
       bottom: "auto"
@@ -161,7 +161,7 @@ export const PANEL_REGISTRY: Record<DraggablePanelId, PanelRegistryEntry> = {
     debugLabel: "Game Plan",
     debugLayout: {
       width: 320,
-      height: 260,
+      height: 190,
       top: 420,
       left: 650,
       right: "auto",
@@ -176,7 +176,7 @@ export const PANEL_REGISTRY: Record<DraggablePanelId, PanelRegistryEntry> = {
     debugLabel: "Components",
     debugLayout: {
       width: 300,
-      height: 226,
+      height: 190,
       top: 420,
       left: 330,
       right: "auto",

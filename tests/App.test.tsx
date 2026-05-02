@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App";
+import { CompListPane } from "../src/components/CompListPane";
 import generatedDataset from "../src/data/tft-set17.json";
 import { getItemDisplay } from "../src/lib/items";
 import { rankCompsBySimilarity } from "../src/lib/similarity";
@@ -215,6 +216,30 @@ describe("App", () => {
     expect(panel.style.transform).toContain("translate3d(");
   });
 
+  it("updates the layout debug dimensions from live panel resize reports", async () => {
+    render(<App />);
+
+    fireEvent.keyDown(window, { key: "F9", code: "F9" });
+
+    const debugPanel = await screen.findByLabelText("Temporary layout debug panel");
+    const panelSelect = within(debugPanel).getByLabelText("Panel");
+    await userEvent.selectOptions(panelSelect, "selectedComponents");
+
+    window.dispatchEvent(
+      new CustomEvent("opnr:aptos-panel-live-layout", {
+        detail: {
+          id: "selectedComponents",
+          layout: { x: 0, y: 0, width: 364, height: 218 }
+        }
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(debugPanel).getByLabelText("width")).toHaveValue("364");
+      expect(within(debugPanel).getByLabelText("height")).toHaveValue("218");
+    });
+  });
+
   it("collapses application panels into draggable top bars", async () => {
     const user = userEvent.setup();
     window.history.pushState({}, "", "/");
@@ -295,7 +320,9 @@ describe("App", () => {
       expect(result).toBeTruthy();
       return result as HTMLElement;
     });
-    const previewCells = Array.from(row.querySelectorAll<HTMLElement>("[data-preview-column]"));
+    const previewCluster = row.querySelector<HTMLElement>(".selection-preview-cluster");
+    expect(previewCluster).toBeTruthy();
+    const previewCells = Array.from(previewCluster?.querySelectorAll<HTMLElement>("[data-preview-column]") ?? []);
 
     expect(previewCells.map((cell) => cell.dataset.previewColumn)).toEqual(["champions", "augments", "components"]);
     previewCells.forEach((cell) => {
@@ -512,16 +539,21 @@ describe("App", () => {
   it("renders collapsed rows with separate source, rank, style, champion, augment, and component columns", async () => {
     render(<App />);
 
-    expect(await screen.findByText("Source")).toBeInTheDocument();
-    expect(screen.getByText("Rank")).toBeInTheDocument();
-    expect(screen.getByText("Style")).toBeInTheDocument();
-    expect(screen.getByText("Composition")).toBeInTheDocument();
-    expect(screen.getByText("Champions")).toBeInTheDocument();
-    expect(screen.getByText("Augments")).toBeInTheDocument();
-    expect(screen.getByText("Components")).toBeInTheDocument();
-
-    const columnLabels = [...document.querySelectorAll(".list-columns > *")].map((element) => element.textContent?.trim());
-    expect(columnLabels).toEqual(["Source", "Rank", "Style", "Composition", "Champions", "Augments", "Components"]);
+    expect(await screen.findByRole("button", { name: "Sort by source" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sort by rank" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sort by style" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sort by comp name" })).toBeInTheDocument();
+    const columnHeader = document.querySelector(".selection-list-columns") as HTMLElement;
+    expect(within(columnHeader).getByText("Champions")).toBeInTheDocument();
+    expect(within(columnHeader).getByText("Augments")).toBeInTheDocument();
+    expect(within(columnHeader).getByText("Components")).toBeInTheDocument();
+    expect(columnHeader).toHaveTextContent("Source");
+    expect(columnHeader).toHaveTextContent("Rank");
+    expect(columnHeader).toHaveTextContent("Style");
+    expect(columnHeader).toHaveTextContent("Composition");
+    expect(columnHeader).toHaveTextContent("Champions");
+    expect(columnHeader).toHaveTextContent("Augments");
+    expect(columnHeader).toHaveTextContent("Components");
 
     const firstComp = dataset.comps.find((candidate) => getCompRankTags(candidate).length > 0);
     if (!firstComp) {
@@ -529,7 +561,7 @@ describe("App", () => {
     }
     const row = await waitFor(() => getCompRow(firstComp.title) as HTMLElement);
 
-    expect(within(row).getByTestId("source-cell")).toBeInTheDocument();
+    expect(row.querySelector(".selection-source-readout")).toBeInTheDocument();
     const rankCell = within(row).getByTestId("rank-cell");
     const rank = getCompRankTags(firstComp)[0];
 
@@ -537,7 +569,7 @@ describe("App", () => {
     expect(rank).toBeDefined();
     expect(rankCell.querySelector(".custom-rank-badge")).toHaveAttribute("data-rank-tier", rank.tier);
     expect(rankCell.querySelector(".rank-glyph")).toHaveTextContent(rank.tier);
-    expect(within(row).getByTestId("style-cell")).toBeInTheDocument();
+    expect(row.querySelector(".selection-style-readout")).toBeInTheDocument();
     expect(within(row).getByTestId("composition-cell")).toHaveTextContent(getDisplayTitle(firstComp.title));
   });
 
@@ -555,7 +587,9 @@ describe("App", () => {
     expect(document.querySelector(".comp-row h2")).toHaveTextContent(firstAlphaTitle);
 
     await user.click(screen.getByRole("button", { name: "Sort by source" }));
-    expect(within(document.querySelector(".comp-row") as HTMLElement).getByTestId("source-cell")).toHaveTextContent(/ACD|MOB|TAC|FLW|MTF/);
+    expect((document.querySelector(".comp-row .selection-source-readout") as HTMLElement).textContent).toMatch(
+      /Academy|Mobalytics|TFTactics|TFTFlow/
+    );
 
     await user.click(screen.getByRole("button", { name: "Sort by rank" }));
     expect(within(document.querySelector(".comp-row") as HTMLElement).getByTestId("rank-cell").querySelector(".custom-rank-badge")).toBeInTheDocument();
@@ -564,9 +598,35 @@ describe("App", () => {
     const firstStyle = dataset.comps
       .map((comp) => getPlaystyleLabel(getCompPlaystyle(comp)) ?? "--")
       .sort((left, right) => left.localeCompare(right))[0];
-    expect(within(document.querySelector(".comp-row") as HTMLElement).getByTestId("style-cell")).toHaveTextContent(
-      firstStyle
+    expect(document.querySelector(".comp-row .selection-style-readout")).toHaveTextContent(firstStyle);
+  });
+
+  it("sorts selection rows by similarity score", async () => {
+    const user = userEvent.setup();
+    const comps = dataset.comps.slice(0, 3);
+    const strongestComp = comps[1];
+
+    render(
+      <CompListPane
+        comps={comps}
+        dataset={dataset}
+        phaseFilter="early"
+        onQuickFilter={vi.fn()}
+        selectionOnly
+        similarityReadouts={{
+          [comps[0].id]: { score: 2, percent: 18 },
+          [strongestComp.id]: { score: 9, percent: 74 },
+          [comps[2].id]: { score: 5, percent: 42 }
+        }}
+      />
     );
+
+    const similaritySortButton = await screen.findByRole("button", { name: "Sort by similarity" });
+    await user.click(screen.getByRole("button", { name: "Sort by comp name" }));
+    await user.click(similaritySortButton);
+
+    expect(similaritySortButton).toHaveAttribute("aria-sort", "descending");
+    expect(document.querySelector(".comp-row h2")).toHaveTextContent(getDisplayTitle(strongestComp.title));
   });
 
   it("keeps separate provider build rows visible while source sort is active", async () => {
@@ -592,13 +652,14 @@ describe("App", () => {
   it("renders collapsed rows with separate source, rank, style, champion, augment, and component cells", async () => {
     render(<App />);
 
-    expect(await screen.findByText("Composition")).toBeInTheDocument();
-    expect(screen.getByText("Source")).toBeInTheDocument();
-    expect(screen.getByText("Rank")).toBeInTheDocument();
-    expect(screen.getByText("Style")).toBeInTheDocument();
-    expect(screen.getByText("Champions")).toBeInTheDocument();
-    expect(screen.getByText("Augments")).toBeInTheDocument();
-    expect(screen.getByText("Components")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Sort by comp name" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sort by source" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sort by rank" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sort by style" })).toBeInTheDocument();
+    const columnHeader = document.querySelector(".selection-list-columns") as HTMLElement;
+    expect(within(columnHeader).getByText("Champions")).toBeInTheDocument();
+    expect(within(columnHeader).getByText("Augments")).toBeInTheDocument();
+    expect(within(columnHeader).getByText("Components")).toBeInTheDocument();
 
     const firstComp = dataset.comps.find((candidate) => getCompRankTags(candidate).length > 0);
     if (!firstComp) {
@@ -607,9 +668,12 @@ describe("App", () => {
     const row = await waitFor(() => getCompRow(firstComp.title) as HTMLElement);
 
     expect(within(row).getByTestId("composition-cell")).toHaveTextContent(getDisplayTitle(firstComp.title));
-    expect(within(row).getByTestId("source-cell")).toHaveTextContent(/signals/);
+    expect(row.querySelector(".selection-source-readout")).toHaveTextContent(
+      getSourceDisplayName(firstComp.sources[0]?.name ?? "")
+    );
     expect(within(row).getByTestId("rank-cell").querySelector(".custom-rank-badge")).toBeInTheDocument();
-    expect(within(row).getByTestId("style-cell")).toBeInTheDocument();
+    expect(row.querySelector(".selection-style-readout")).toBeInTheDocument();
+    expect(row.querySelector(".selection-title-line .selection-style-readout + h2")).toBeInTheDocument();
   });
 
   it("shows the best-ranked augment previews before lower-ranked options", async () => {

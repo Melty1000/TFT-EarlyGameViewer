@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-05-01T15:08:34.4538096-05:00",
+  "title": "Design System: opnr.gg",
+  "extensions": {
+    "colorMeta": {
+      "cockpit-void": {
+        "role": "neutral",
+        "displayName": "Cockpit Void",
+        "canonical": "#08090d",
+        "tonalRamp": ["oklch(15% 0.01 270)", "oklch(24% 0.01 270)", "oklch(34% 0.01 270)", "oklch(45% 0.01 270)", "oklch(58% 0.01 270)", "oklch(72% 0.01 270)", "oklch(85% 0.008 270)", "oklch(95% 0.006 270)"]
+      },
+      "panel-carbon": {
+        "role": "neutral",
+        "displayName": "Panel Carbon",
+        "canonical": "#111216",
+        "tonalRamp": ["oklch(16% 0.008 270)", "oklch(25% 0.008 270)", "oklch(35% 0.008 270)", "oklch(46% 0.008 270)", "oklch(58% 0.008 270)", "oklch(72% 0.007 270)", "oklch(86% 0.006 270)", "oklch(95% 0.004 270)"]
+      },
+      "signal-lime": {
+        "role": "primary",
+        "displayName": "Signal Lime",
+        "canonical": "#d9f933",
+        "tonalRamp": ["oklch(18% 0.06 126)", "oklch(28% 0.09 126)", "oklch(40% 0.13 126)", "oklch(52% 0.16 126)", "oklch(64% 0.18 126)", "oklch(76% 0.19 126)", "oklch(86% 0.14 126)", "oklch(95% 0.06 126)"]
+      },
+      "success-mint": {
+        "role": "secondary",
+        "displayName": "Success Mint",
+        "canonical": "#00df98",
+        "tonalRamp": ["oklch(17% 0.05 164)", "oklch(27% 0.08 164)", "oklch(39% 0.11 164)", "oklch(51% 0.14 164)", "oklch(63% 0.16 164)", "oklch(75% 0.17 164)", "oklch(86% 0.12 164)", "oklch(95% 0.05 164)"]
+      },
+      "danger-orange": {
+        "role": "secondary",
+        "displayName": "Danger Orange",
+        "canonical": "#f2622c",
+        "tonalRamp": ["oklch(18% 0.05 42)", "oklch(29% 0.08 42)", "oklch(41% 0.12 42)", "oklch(53% 0.16 42)", "oklch(65% 0.19 42)", "oklch(76% 0.18 42)", "oklch(87% 0.11 42)", "oklch(95% 0.05 42)"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Large command phrases, empty-state calls, and wordmark-scale moments."
+      },
+      "label": {
+        "displayName": "Cockpit Label",
+        "purpose": "Panel chrome, status metadata, source labels, and compact command text."
+      }
+    },
+    "shadows": [
+      {
+        "name": "none-at-rest",
+        "value": "box-shadow: none",
+        "purpose": "Default for current dot-matrix panels and build rows."
+      },
+      {
+        "name": "accent-micro-glow",
+        "value": "0 0 7px color-mix(in srgb, var(--aptos-accent) 32%, transparent)",
+        "purpose": "Tiny item and board highlights only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-fast",
+        "value": "100ms ease",
+        "purpose": "Hover, focus, and small state color changes."
+      },
+      {
+        "name": "row-open",
+        "value": "420ms cubic-bezier(0.16, 1.08, 0.38, 0.98)",
+        "purpose": "Build row reveal and menu extension."
+      },
+      {
+        "name": "glitch-feedback",
+        "value": "320ms-440ms steps(2, end)",
+        "purpose": "Short command feedback on bracket controls and logo hover."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "desktop-first",
+        "value": ">= 1024px"
+      },
+      {
+        "name": "mobile-stack",
+        "value": "< 768px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Bracket Command Button",
+      "kind": "button",
+      "refersTo": "button-bracket",
+      "description": "Compact command control for menu, theme, reset, and panel actions.",
+      "html": "<button class=\"ds-bracket-command\">[ Menu ]</button>",
+      "css": ".ds-bracket-command { min-height: 34px; padding: 7px 8px; border: 0; border-radius: 0; background: transparent; color: var(--aptos-inverted, #f7f7f7); font: 700 10px/1 'DM Mono', 'Courier New', Consolas, monospace; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; } .ds-bracket-command:hover, .ds-bracket-command:focus-visible { color: var(--aptos-accent, #d9f933); outline: 1px solid transparent; }"
+    },
+    {
+      "name": "Draggable Panel",
+      "kind": "card",
+      "refersTo": "panel-shell",
+      "description": "Square-edged draggable instrument panel with mono chrome.",
+      "html": "<section class=\"ds-panel\"><div class=\"ds-panel-bar\"><span>06 / Components</span><strong>[ Drag ]</strong></div><div class=\"ds-panel-body\">SELECT A BUILD</div></section>",
+      "css": ".ds-panel { display: grid; grid-template-rows: 36px minmax(0, 1fr); min-width: 260px; min-height: 180px; border-top: 1px solid color-mix(in srgb, var(--aptos-inverted, #f7f7f7) 18%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--aptos-inverted, #f7f7f7) 18%, transparent); border-left: 0; border-right: 0; border-radius: 0; background: color-mix(in srgb, var(--aptos-primary, #111216) 94%, transparent); color: var(--aptos-inverted, #f7f7f7); box-shadow: none; } .ds-panel-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 0 10px; border-bottom: 1px solid color-mix(in srgb, var(--aptos-inverted, #f7f7f7) 18%, transparent); color: var(--aptos-muted, #f7f7f78f); font: 700 10px/1 'DM Mono', 'Courier New', Consolas, monospace; letter-spacing: 0.08em; text-transform: uppercase; } .ds-panel-bar strong { color: var(--aptos-accent, #d9f933); } .ds-panel-body { padding: 10px; font: 700 18px/0.95 Rajdhani, sans-serif; }"
+    },
+    {
+      "name": "Build Record Row",
+      "kind": "custom",
+      "refersTo": "record-row",
+      "description": "Compact clipped row for source, rank, build name, icons, and demand signals.",
+      "html": "<article class=\"ds-build-row\"><span class=\"ds-rank\">[ S ]</span><div><small>[ Mobalytics ] [ Early / 4 ]</small><strong>Cards & Cartridges</strong></div></article>",
+      "css": ".ds-build-row { display: grid; grid-template-columns: 42px minmax(0, 1fr); align-items: center; min-height: 46px; padding: 0 10px; border: 0; background: color-mix(in srgb, var(--aptos-inverted, #f7f7f7) 3%, transparent); color: var(--aptos-inverted, #f7f7f7); clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px)); } .ds-build-row:hover, .ds-build-row:focus-within { border-color: var(--aptos-accent, #d9f933); background: color-mix(in srgb, var(--aptos-inverted, #f7f7f7) 5%, transparent); } .ds-build-row small { display: block; color: var(--aptos-muted, #f7f7f78f); font: 700 10px/1 'DM Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; } .ds-build-row strong { display: block; color: var(--aptos-inverted, #f7f7f7); font: 700 13px/1 Rajdhani, sans-serif; text-transform: uppercase; } .ds-rank { color: var(--aptos-accent, #d9f933); font: 700 18px/1 Rajdhani, sans-serif; }"
+    },
+    {
+      "name": "Search Field",
+      "kind": "input",
+      "refersTo": "input-search",
+      "description": "Transparent wire field for search and filter entry.",
+      "html": "<label class=\"ds-search\"><span>Search</span><input placeholder=\"champion, trait, augment...\" /></label>",
+      "css": ".ds-search { display: grid; gap: 6px; color: var(--aptos-muted, #f7f7f78f); font: 700 10px/1 'DM Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; } .ds-search input { height: 28px; padding: 0 8px; border: 0; border-top: 1px solid color-mix(in srgb, var(--aptos-inverted, #f7f7f7) 18%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--aptos-inverted, #f7f7f7) 18%, transparent); border-radius: 0; background: transparent; color: var(--aptos-inverted, #f7f7f7); font: inherit; outline: 0; text-transform: none; } .ds-search input:focus-visible { border-color: var(--aptos-accent, #d9f933); }"
+    },
+    {
+      "name": "Filter Chip",
+      "kind": "chip",
+      "refersTo": "chip-filter",
+      "description": "Compact uppercase filter token with selected signal color.",
+      "html": "<button class=\"ds-chip is-selected\">[ Late ]</button>",
+      "css": ".ds-chip { min-height: 24px; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--aptos-inverted, #f7f7f7); font: 700 10px/1 'DM Mono', monospace; letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; } .ds-chip:hover, .ds-chip:focus-visible, .ds-chip.is-selected { color: var(--aptos-accent, #d9f933); outline: 1px solid transparent; }"
+    },
+    {
+      "name": "Rank Badge",
+      "kind": "custom",
+      "refersTo": "chip-filter",
+      "description": "Transparent tier mark that uses color as a contained data accent.",
+      "html": "<span class=\"ds-rank-badge\">S</span>",
+      "css": ".ds-rank-badge { display: inline-grid; place-items: center; min-width: 42px; height: 32px; padding: 0; border: 0; background: transparent; color: var(--aptos-accent, #d9f933); font: 700 18px/1 Rajdhani, sans-serif; box-shadow: none; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Build Cockpit",
+    "overview": "opnr.gg is a desktop command surface for TFT players who want more control than any single build source gives them. The visual system should feel like a technical cockpit for comp discovery: dense, sharp, inspectable, and built for active manipulation.",
+    "keyCharacteristics": [
+      "Dense desktop information, organized for repeated scanning.",
+      "Flat panel layers with linework and state color instead of decorative shadows.",
+      "Bracketed commands and mono labels for a technical cockpit feel.",
+      "Neon signal accent used sparingly for status, active states, and intent.",
+      "Performance-conscious effects: motion must stay responsive during dragging, resizing, and hover inspection."
+    ],
+    "rules": [
+      {
+        "name": "The Signal Rarity Rule",
+        "body": "Signal Lime is for live affordance and state, never decoration. If more than roughly 10 percent of a screen glows lime, the interface is shouting.",
+        "section": "colors"
+      },
+      {
+        "name": "The No Pure Void Rule",
+        "body": "Use Cockpit Void rather than pure black. Future dark neutrals should stay slightly tinted so the field feels engineered, not empty.",
+        "section": "colors"
+      },
+      {
+        "name": "The Flat Instrument Rule",
+        "body": "Panels are instruments, not cards. Use linework, coordinates, and state color for hierarchy before adding shadows.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do preserve the app/product posture: this is an app people work in, not a landing page.",
+      "Do keep the cool, edgy, technical cockpit feel from PRODUCT.md.",
+      "Do treat performance as design. Dot backgrounds, panel resizing, hover inspection, and drag interactions must remain responsive."
+    ],
+    "donts": [
+      "Don't make opnr.gg feel like a serif editorial publication.",
+      "Don't make it feel like a soft SaaS marketing page, airy landing-page hero, or brochure.",
+      "Don't turn the app into a generic card dashboard or corporate BI surface.",
+      "Don't use decorative glassmorphism showcases.",
+      "Don't bury source data inside vague summaries when players need control, comparison, and inspection."
+    ]
+  }
+}

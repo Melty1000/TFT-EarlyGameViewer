@@ -306,7 +306,9 @@ export function renderAugment(
 type LevellingGuideAction = "level" | "push" | "stay";
 
 export function parseLevellingGuideLine(line: string) {
-  const match = line.match(/\b(?<action>level(?:\s+to)?|push\s+level|stay\s+level)\s+(?<level>\d+)\b/i);
+  const match = line.match(
+    /^\s*(?:[-*•]\s*)?(?:(?<prefixStage>\d-\d)\s*(?:[:\-–—]\s*)?)?(?<action>level(?:\s+to)?|push\s+level|stay\s+level)\s+(?<level>\d+)\b/i
+  );
 
   if (!match?.groups) {
     return null;
@@ -322,7 +324,7 @@ export function parseLevellingGuideLine(line: string) {
   const stageMatch = afterAction.match(/^\s*(?:at|on|through)\s+(?<stage>\d-\d)\b/i);
   const afterStage = stageMatch ? afterAction.slice(stageMatch[0].length) : afterAction;
   const goldMatch = afterStage.match(/^\s*with\s+(?<gold>~?\d+\+?\s*(?:gold|g))\b/i);
-  const stage = stageMatch?.groups?.stage ?? "";
+  const stage = stageMatch?.groups?.stage ?? match.groups.prefixStage ?? "";
   const gold = goldMatch?.groups?.gold ?? "";
   const note = line
     .replace(match[0], "")

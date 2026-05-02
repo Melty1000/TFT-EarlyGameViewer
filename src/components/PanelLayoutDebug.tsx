@@ -9,6 +9,7 @@ import {
 
 const DEBUG_LAYOUT_STORAGE_KEY = "opnr:aptos-layout-debug:v1";
 const DEBUG_DEFAULT_LAYOUT_STORAGE_KEY = "opnr:aptos-layout-debug-default:v1";
+const PANEL_LIVE_LAYOUT_EVENT = "opnr:aptos-panel-live-layout";
 const DEBUG_FIELDS: Array<keyof DebugBoxLayout> = ["width", "height", "top", "left", "right", "bottom"];
 const MIN_BROWSER_LAYOUT = { width: 840, height: 340 };
 const DEBUG_PANEL_OPTIONS = PANEL_DEBUG_OPTIONS;
@@ -133,6 +134,17 @@ function saveDebugDefaultLayout(layout: Record<DebugPanelId, DebugBoxLayout>) {
   window.localStorage.setItem(DEBUG_DEFAULT_LAYOUT_STORAGE_KEY, JSON.stringify(layout));
 }
 
+function hasStoredDebugLayout() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return Boolean(
+    window.localStorage.getItem(DEBUG_LAYOUT_STORAGE_KEY) ||
+      window.localStorage.getItem(DEBUG_DEFAULT_LAYOUT_STORAGE_KEY)
+  );
+}
+
 function getOppositeField(field: keyof DebugBoxLayout): keyof DebugBoxLayout | null {
   if (field === "left") return "right";
   if (field === "right") return "left";
@@ -145,8 +157,13 @@ function nudgeValue(value: CssBoxValue, amount: number) {
   return typeof value === "number" ? Math.round(value + amount) : amount;
 }
 
+function getLiveDimension(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.round(value) : null;
+}
+
 export function PanelLayoutDebug() {
   const [open, setOpen] = useState(false);
+  const [layoutActive, setLayoutActive] = useState(() => hasStoredDebugLayout());
   const [selectedPanelId, setSelectedPanelId] = useState<DebugPanelId>("selectedBoard");
   const [defaultLayout, setDefaultLayout] = useState<Record<DebugPanelId, DebugBoxLayout>>(
     () => getInitialDebugState().defaultLayout
@@ -157,6 +174,29 @@ export function PanelLayoutDebug() {
   const layoutText = useMemo(() => stringifyLayout(layout), [layout]);
 
   useEffect(() => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if ((event.key !== "F9" && event.code !== "F9") || event.repeat) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setLayoutActive(true);
+      setOpen((current) => !current);
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!layoutActive) {
+      return;
+    }
+
     const root = document.querySelector<HTMLElement>(".dot-test-shell");
     if (!root) {
       return;
@@ -170,7 +210,50 @@ export function PanelLayoutDebug() {
     root.style.setProperty("--opnr-debug-browser-translate-x", browserTranslateX(layout.browser));
 
     saveDebugLayout(layout);
-  }, [layout]);
+  }, [layout, layoutActive]);
+
+  useEffect(() => {
+    if (!layoutActive) {
+      return;
+    }
+
+    const handleLiveLayout = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      const id = detail?.id;
+      if (typeof id !== "string" || !isDebugPanelId(id)) {
+        return;
+      }
+
+      const width = getLiveDimension(detail?.layout?.width);
+      const height = getLiveDimension(detail?.layout?.height);
+      if (!width && !height) {
+        return;
+      }
+
+      setLayout((current) => {
+        const nextPanel = {
+          ...current[id],
+          ...(width ? { width } : {}),
+          ...(height ? { height } : {})
+        };
+
+        if (nextPanel.width === current[id].width && nextPanel.height === current[id].height) {
+          return current;
+        }
+
+        return {
+          ...current,
+          [id]: nextPanel
+        };
+      });
+    };
+
+    window.addEventListener(PANEL_LIVE_LAYOUT_EVENT, handleLiveLayout);
+
+    return () => {
+      window.removeEventListener(PANEL_LIVE_LAYOUT_EVENT, handleLiveLayout);
+    };
+  }, [layoutActive]);
 
   const updatePanelField = (panelId: DebugPanelId, field: keyof DebugBoxLayout, value: CssBoxValue) => {
     setLayout((current) => {
@@ -258,72 +341,80 @@ export function PanelLayoutDebug() {
     window.setTimeout(() => setCopyState("idle"), 1400);
   };
 
+  if (!open) {
+    return null;
+  }
+
   return (
-    <section className={open ? "panel-layout-debug is-open" : "panel-layout-debug"} aria-label="Temporary layout debug panel">
-      <button type="button" className="panel-layout-debug-toggle glitch-hover" onClick={() => setOpen((current) => !current)}>
-        [ Layout Debug ]
+    <section className="panel-layout-debug is-open" aria-label="Temporary layout debug panel">
+      <button
+        type="button"
+        className="panel-layout-debug-toggle glitch-hover"
+        aria-keyshortcuts="F9"
+        title="Press F9 to close"
+        onClick={() => setOpen(false)}
+      >
+        [ Layout Debug / F9 ]
       </button>
 
-      {open ? (
-        <div className="panel-layout-debug-body">
-          <label className="panel-layout-debug-field span-all">
-            <span>Panel</span>
-            <select
-              value={selectedPanelId}
+      <div className="panel-layout-debug-body">
+        <label className="panel-layout-debug-field span-all">
+          <span>Panel</span>
+          <select
+            value={selectedPanelId}
+            onChange={(event) => {
+              if (isDebugPanelId(event.target.value)) {
+                setSelectedPanelId(event.target.value);
+              }
+            }}
+          >
+            {DEBUG_PANEL_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {DEBUG_FIELDS.map((field) => (
+          <label key={field} className="panel-layout-debug-field">
+            <span>{field}</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={formatValue(selectedLayout[field])}
               onChange={(event) => {
-                if (isDebugPanelId(event.target.value)) {
-                  setSelectedPanelId(event.target.value);
-                }
+                const rawValue = event.target.value.trim();
+                const numericValue = Number(rawValue);
+                const nextValue = rawValue === "" || rawValue.toLowerCase() === "auto"
+                  ? "auto"
+                  : rawValue === "50%"
+                    ? "50%"
+                    : Number.isFinite(numericValue)
+                      ? numericValue
+                      : selectedLayout[field];
+                updatePanelField(selectedPanelId, field, nextValue);
               }}
-            >
-              {DEBUG_PANEL_OPTIONS.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            />
           </label>
+        ))}
 
-          {DEBUG_FIELDS.map((field) => (
-            <label key={field} className="panel-layout-debug-field">
-              <span>{field}</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={formatValue(selectedLayout[field])}
-                onChange={(event) => {
-                  const rawValue = event.target.value.trim();
-                  const numericValue = Number(rawValue);
-                  const nextValue = rawValue === "" || rawValue.toLowerCase() === "auto"
-                    ? "auto"
-                    : rawValue === "50%"
-                      ? "50%"
-                      : Number.isFinite(numericValue)
-                        ? numericValue
-                        : selectedLayout[field];
-                  updatePanelField(selectedPanelId, field, nextValue);
-                }}
-              />
-            </label>
-          ))}
-
-          <div className="panel-layout-debug-nudges span-all">
-            <button type="button" onClick={() => nudgeSelected(0, -8)}>[ Up ]</button>
-            <button type="button" onClick={() => nudgeSelected(-8, 0)}>[ Left ]</button>
-            <button type="button" onClick={() => nudgeSelected(8, 0)}>[ Right ]</button>
-            <button type="button" onClick={() => nudgeSelected(0, 8)}>[ Down ]</button>
-          </div>
-
-          <div className="panel-layout-debug-actions span-all">
-            <button type="button" onClick={resetSelected}>[ Reset Selected ]</button>
-            <button type="button" onClick={resetAll}>[ Reset All ]</button>
-            <button type="button" onClick={makeDefault}>[ Make Default ]</button>
-            <button type="button" onClick={copyLayout}>[{copyState === "copied" ? " Copied " : copyState === "error" ? " Copy Error " : " Copy Layout "}]</button>
-          </div>
-
-          <textarea className="panel-layout-debug-output span-all" readOnly value={layoutText} />
+        <div className="panel-layout-debug-nudges span-all">
+          <button type="button" onClick={() => nudgeSelected(0, -8)}>[ Up ]</button>
+          <button type="button" onClick={() => nudgeSelected(-8, 0)}>[ Left ]</button>
+          <button type="button" onClick={() => nudgeSelected(8, 0)}>[ Right ]</button>
+          <button type="button" onClick={() => nudgeSelected(0, 8)}>[ Down ]</button>
         </div>
-      ) : null}
+
+        <div className="panel-layout-debug-actions span-all">
+          <button type="button" onClick={resetSelected}>[ Reset Selected ]</button>
+          <button type="button" onClick={resetAll}>[ Reset All ]</button>
+          <button type="button" onClick={makeDefault}>[ Make Default ]</button>
+          <button type="button" onClick={copyLayout}>[{copyState === "copied" ? " Copied " : copyState === "error" ? " Copy Error " : " Copy Layout "}]</button>
+        </div>
+
+        <textarea className="panel-layout-debug-output span-all" readOnly value={layoutText} />
+      </div>
     </section>
   );
 }

@@ -33,7 +33,8 @@ type CompRow = {
   comp: Comp;
 };
 
-type SortKey = "name" | "source" | "rank" | "style";
+type SimilarityReadouts = Record<string, { score: number; percent: number }>;
+type SortKey = "name" | "source" | "rank" | "style" | "similarity";
 type SortDirection = "asc" | "desc";
 
 const AUGMENT_TIER_ORDER: Record<string, number> = {
@@ -75,7 +76,7 @@ function getDefaultBoardPhase(phaseFilter: PhaseFilter): PhaseKey {
   return phaseFilter === "all" ? "late" : phaseFilter;
 }
 
-function compareRows(left: CompRow, right: CompRow, sortKey: SortKey) {
+function compareRows(left: CompRow, right: CompRow, sortKey: SortKey, similarityReadouts: SimilarityReadouts = {}) {
   if (sortKey === "source") {
     const leftSource = getSourceDisplayName(left.comp.sources[0]?.name ?? "");
     const rightSource = getSourceDisplayName(right.comp.sources[0]?.name ?? "");
@@ -98,7 +99,24 @@ function compareRows(left: CompRow, right: CompRow, sortKey: SortKey) {
     return leftStyle.localeCompare(rightStyle) || left.title.localeCompare(right.title);
   }
 
+  if (sortKey === "similarity") {
+    const leftReadout = similarityReadouts[left.comp.id];
+    const rightReadout = similarityReadouts[right.comp.id];
+    const leftScore = leftReadout?.score ?? Number.NEGATIVE_INFINITY;
+    const rightScore = rightReadout?.score ?? Number.NEGATIVE_INFINITY;
+    const leftPercent = leftReadout?.percent ?? Number.NEGATIVE_INFINITY;
+    const rightPercent = rightReadout?.percent ?? Number.NEGATIVE_INFINITY;
+
+    return leftScore - rightScore || leftPercent - rightPercent || left.title.localeCompare(right.title);
+  }
+
   return left.title.localeCompare(right.title);
+}
+
+export function getInitialCompListSelection(comps: Comp[], lockSort = false) {
+  const rows = buildCompRows(comps);
+  const sortedRows = lockSort ? rows : [...rows].sort((left, right) => compareRows(left, right, "rank"));
+  return sortedRows[0]?.comp.id ?? null;
 }
 
 function AnimatedChampionStrip({
@@ -351,8 +369,26 @@ export function CompListPane({
   const [activePhases, setActivePhases] = useState<Record<string, PhaseKey>>({});
   const [liveInspectors, setLiveInspectors] = useState<Record<string, InspectorTarget>>({});
   const [lockedInspectors, setLockedInspectors] = useState<Record<string, InspectorTarget>>({});
-  const [sortKey, setSortKey] = useState<SortKey>("rank");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const hasSimilarityReadouts = Object.keys(similarityReadouts).length > 0;
+  const hadSimilarityReadoutsRef = useRef(hasSimilarityReadouts);
+  const [sortKey, setSortKey] = useState<SortKey>(hasSimilarityReadouts ? "similarity" : "rank");
+  const [sortDirection, setSortDirection] = useState<SortDirection>(hasSimilarityReadouts ? "desc" : "asc");
+
+  useEffect(() => {
+    const hadSimilarityReadouts = hadSimilarityReadoutsRef.current;
+    hadSimilarityReadoutsRef.current = hasSimilarityReadouts;
+
+    if (hasSimilarityReadouts && !hadSimilarityReadouts) {
+      setSortKey("similarity");
+      setSortDirection("desc");
+      return;
+    }
+
+    if (!hasSimilarityReadouts && hadSimilarityReadouts) {
+      setSortKey((currentSortKey) => (currentSortKey === "similarity" ? "rank" : currentSortKey));
+      setSortDirection((currentDirection) => (sortKey === "similarity" ? "asc" : currentDirection));
+    }
+  }, [hasSimilarityReadouts, sortKey]);
 
   useEffect(() => {
     const visibleIds = new Set(rows.map((row) => row.key));
@@ -366,9 +402,9 @@ export function CompListPane({
       return rows;
     }
 
-    const nextRows = [...rows].sort((left, right) => compareRows(left, right, sortKey));
+    const nextRows = [...rows].sort((left, right) => compareRows(left, right, sortKey, similarityReadouts));
     return sortDirection === "desc" ? nextRows.reverse() : nextRows;
-  }, [lockSort, rows, sortDirection, sortKey]);
+  }, [lockSort, rows, similarityReadouts, sortDirection, sortKey]);
   const usesSelectionMode = selectionOnly || Boolean(onSelectComp);
 
   const changeSort = (nextSortKey: SortKey) => {
@@ -378,10 +414,22 @@ export function CompListPane({
         return currentSortKey;
       }
 
-      setSortDirection("asc");
+      setSortDirection(nextSortKey === "similarity" ? "desc" : "asc");
       return nextSortKey;
     });
   };
+
+  const renderSortButton = (nextSortKey: SortKey, label: string, ariaLabel: string) => (
+    <button
+      type="button"
+      className={sortKey === nextSortKey ? "column-sort-button active" : "column-sort-button"}
+      aria-label={ariaLabel}
+      aria-sort={sortKey === nextSortKey ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
+      onClick={() => changeSort(nextSortKey)}
+    >
+      {label}
+    </button>
+  );
 
   const ensureRowState = (compId: string) => {
     setSelectedTabs((current) =>
@@ -419,92 +467,24 @@ export function CompListPane({
         {usesSelectionMode ? (
           <>
             <span className="selection-header-latch" aria-hidden="true" />
-            <button
-              type="button"
-              className={sortKey === "rank" ? "column-sort-button active" : "column-sort-button"}
-              aria-label="Sort by rank"
-              aria-sort={sortKey === "rank" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
-              onClick={() => changeSort("rank")}
-            >
-              Rank
-            </button>
             <div className="selection-build-header">
-              <button
-                type="button"
-                className={sortKey === "source" ? "column-sort-button active" : "column-sort-button"}
-                aria-label="Sort by source"
-                aria-sort={sortKey === "source" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
-                onClick={() => changeSort("source")}
-              >
-                Source
-              </button>
-              <button
-                type="button"
-                className={sortKey === "name" ? "column-sort-button active" : "column-sort-button"}
-                aria-label="Sort by comp name"
-                aria-sort={sortKey === "name" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
-                onClick={() => changeSort("name")}
-              >
-                Build
-              </button>
-              <button
-                type="button"
-                className={sortKey === "style" ? "column-sort-button active" : "column-sort-button"}
-                aria-label="Sort by style"
-                aria-sort={sortKey === "style" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
-                onClick={() => changeSort("style")}
-              >
-                Style
-              </button>
+              {renderSortButton("source", "Source", "Sort by source")}
+              {renderSortButton("rank", "Rank", "Sort by rank")}
+              {renderSortButton("name", "Composition", "Sort by comp name")}
+              {renderSortButton("style", "Style", "Sort by style")}
+              {hasSimilarityReadouts ? renderSortButton("similarity", "Similarity", "Sort by similarity") : null}
             </div>
-            <div className="selection-static-column selection-preview-header" data-preview-column="champions">
-              Champions
-            </div>
-            <div className="selection-static-column selection-preview-header" data-preview-column="augments">
-              Augments
-            </div>
-            <div className="selection-static-column selection-preview-header" data-preview-column="components">
-              Components
-            </div>
+            <span className="selection-static-column selection-preview-header">Champions</span>
+            <span className="selection-static-column selection-preview-header">Augments</span>
+            <span className="selection-static-column selection-preview-header">Components</span>
           </>
         ) : (
           <>
-            <button
-              type="button"
-              className={sortKey === "source" ? "column-sort-button active" : "column-sort-button"}
-              aria-label="Sort by source"
-              aria-sort={sortKey === "source" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
-              onClick={() => changeSort("source")}
-            >
-              Source
-            </button>
-            <button
-              type="button"
-              className={sortKey === "rank" ? "column-sort-button active" : "column-sort-button"}
-              aria-label="Sort by rank"
-              aria-sort={sortKey === "rank" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
-              onClick={() => changeSort("rank")}
-            >
-              Rank
-            </button>
-            <button
-              type="button"
-              className={sortKey === "style" ? "column-sort-button active" : "column-sort-button"}
-              aria-label="Sort by style"
-              aria-sort={sortKey === "style" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
-              onClick={() => changeSort("style")}
-            >
-              Style
-            </button>
-            <button
-              type="button"
-              className={sortKey === "name" ? "column-sort-button active" : "column-sort-button"}
-              aria-label="Sort by comp name"
-              aria-sort={sortKey === "name" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
-              onClick={() => changeSort("name")}
-            >
-              Composition
-            </button>
+            {renderSortButton("source", "Source", "Sort by source")}
+            {renderSortButton("rank", "Rank", "Sort by rank")}
+            {renderSortButton("style", "Style", "Sort by style")}
+            {renderSortButton("name", "Composition", "Sort by comp name")}
+            {hasSimilarityReadouts ? renderSortButton("similarity", "Similarity", "Sort by similarity") : null}
             <div>Champions</div>
             <div>Augments</div>
             <div>Components</div>
@@ -580,35 +560,49 @@ export function CompListPane({
                         <span className="selection-source-readout" title={sourceDisplayName}>
                           [ {sourceDisplayName} ]
                         </span>
-                        <span>[ {previewPhase} / {previewChampions.length} ]</span>
-                        <span>[ {evidenceCount} evidence ]</span>
-                        {similarityReadout ? <strong>[ SIM {similarityReadout.score} / {similarityReadout.percent}% ]</strong> : null}
-                        {isSelected ? <strong>[ ACTIVE ]</strong> : null}
+                        <span className="selection-phase-readout">[ {previewPhase} / {previewChampions.length} ]</span>
+                        <span className="selection-evidence-readout">[ {evidenceCount} evidence ]</span>
+                        {similarityReadout ? (
+                          <strong className="selection-similarity-readout">
+                            [ SIM {similarityReadout.score} / {similarityReadout.percent}% ]
+                          </strong>
+                        ) : null}
+                        {isSelected ? <strong className="selection-active-readout">[ ACTIVE ]</strong> : null}
                       </div>
-                      <h2>{row.title}</h2>
-                      <div className="selection-style-readout">
-                        <StyleCell playstyle={playstyle} />
+                      <div className="selection-title-line">
+                        <div className="selection-style-readout">
+                          <StyleCell playstyle={playstyle} />
+                        </div>
+                        <h2>{row.title}</h2>
                       </div>
                     </div>
 
-                    <div
-                      className="champions-cell selection-formation-cell selection-preview-cell"
-                      data-preview-column="champions"
-                    >
-                      <AnimatedChampionStrip
-                        champions={previewChampions}
-                        label={`${row.title} ${previewPhase} champions`}
-                        animate={isExpanded}
-                        compact
-                      />
-                    </div>
+                    <div className="selection-preview-cluster">
+                      <div
+                        className="champions-cell selection-formation-cell selection-preview-cell"
+                        data-preview-column="champions"
+                      >
+                        <AnimatedChampionStrip
+                          champions={previewChampions}
+                          label={`${row.title} ${previewPhase} champions`}
+                          animate={isExpanded}
+                          compact
+                        />
+                      </div>
 
-                    <div className="augments-cell selection-token-cell selection-preview-cell" data-preview-column="augments">
-                      <AugmentPreviewStrip comp={comp} dataset={dataset} />
-                    </div>
+                      <div
+                        className="augments-cell selection-token-cell selection-preview-cell"
+                        data-preview-column="augments"
+                      >
+                        <AugmentPreviewStrip comp={comp} dataset={dataset} />
+                      </div>
 
-                    <div className="components-cell selection-token-cell selection-preview-cell" data-preview-column="components">
-                      <ComponentDemandStrip comp={comp} />
+                      <div
+                        className="components-cell selection-token-cell selection-preview-cell"
+                        data-preview-column="components"
+                      >
+                        <ComponentDemandStrip comp={comp} />
+                      </div>
                     </div>
                   </>
                 ) : (
