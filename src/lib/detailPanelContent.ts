@@ -1,5 +1,5 @@
 import type { PhaseKey } from "../../shared/normalization";
-import type { Comp, Dataset, GuideSection } from "../../shared/tft";
+import type { Champion, Comp, Dataset, GuideSection } from "../../shared/tft";
 import { getItemDisplay, type ItemDisplay } from "./items";
 
 export type DetailPanelGuideGroups = {
@@ -7,10 +7,15 @@ export type DetailPanelGuideGroups = {
   gamePlan: GuideSection[];
 };
 
-export type CompletedItemRecipeGroup = {
-  item: ItemDisplay;
-  count: number;
-  recipe: ItemDisplay[];
+export type AssignedItemHolder = {
+  champion: Champion;
+  slotIndex: number;
+  starLevel: number;
+  items: {
+    item: ItemDisplay;
+    recipe: ItemDisplay[];
+    index: number;
+  }[];
 };
 
 function normalizeGuideTitle(title: string) {
@@ -107,25 +112,36 @@ export function getLevellingGuideSection(comp: Comp, phase: PhaseKey): GuideSect
   );
 }
 
-export function getPhaseItemCounts(comp: Comp, phase: PhaseKey) {
-  const itemCounts = new Map<string, number>();
+export function getAssignedItemHolders(comp: Comp, dataset: Dataset, phase: PhaseKey): AssignedItemHolder[] {
+  const phaseData = comp.phases[phase];
 
-  for (const slot of comp.phases[phase].boardSlots) {
-    for (const itemId of slot.itemIds ?? []) {
-      itemCounts.set(itemId, (itemCounts.get(itemId) ?? 0) + 1);
+  return phaseData.boardSlots.flatMap((slot): AssignedItemHolder[] => {
+    if (!slot.championId || !slot.itemIds.length) {
+      return [];
     }
-  }
 
-  return Array.from(itemCounts.entries()).map(([id, count]) => ({ id, count }));
-}
+    const champion = dataset.championsById[slot.championId];
+    if (!champion) {
+      return [];
+    }
 
-export function getCompletedItemRecipeGroups(comp: Comp, dataset: Dataset, phase: PhaseKey): CompletedItemRecipeGroup[] {
-  return getPhaseItemCounts(comp, phase).map(({ id, count }) => {
-    const item = getItemDisplay(dataset, id);
-    return {
-      item,
-      count,
-      recipe: item.recipe.slice().sort((left, right) => left.name.localeCompare(right.name))
-    };
+    const items = slot.itemIds.map((itemId, index) => {
+      const item = getItemDisplay(dataset, itemId);
+
+      return {
+        item,
+        recipe: item.recipe.slice().sort((left, right) => left.name.localeCompare(right.name)),
+        index
+      };
+    });
+
+    return [
+      {
+        champion,
+        slotIndex: slot.index,
+        starLevel: slot.starLevel ?? phaseData.championLevels?.[champion.id] ?? 1,
+        items
+      }
+    ];
   });
 }

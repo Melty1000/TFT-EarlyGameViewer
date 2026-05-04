@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import type { Comp, Dataset, Item } from "../../shared/tft";
+import type { Comp, Dataset } from "../../shared/tft";
 import type { PhaseKey } from "../../shared/normalization";
 import { COMPONENT_LABELS } from "../../shared/normalization";
+import { getNativeBoardPhases, getPreferredBoardPhase } from "../../shared/phaseAvailability";
 import {
   getCompDisplayTitle,
   getCompPlaystyle,
@@ -18,6 +19,11 @@ import {
   type SimilarityResult,
   type SimilaritySelection
 } from "../lib/similarity";
+import {
+  getSimilarityEntitySections,
+  type SimilarityEntityKind as EntityKind,
+  type SimilarityEntityOption as EntityOption
+} from "../lib/similarityOptions";
 import { DetailPane, type DetailTab, type InspectorTarget } from "./DetailPane";
 import { RankBadge } from "./RankBadge";
 
@@ -26,25 +32,6 @@ type SimilarityViewProps = {
   dataset: Dataset;
   phases: PhaseKey[];
   onQuickFilter: (label: string) => void;
-};
-
-type EntityKind = "champion" | "augment" | "item" | "component";
-
-type EntityOption = {
-  kind: EntityKind;
-  id: string;
-  name: string;
-  icon: string;
-  meta?: string;
-};
-
-const AUGMENT_TIER_ORDER: Record<string, number> = {
-  S: 0,
-  A: 1,
-  B: 2,
-  C: 3,
-  D: 4,
-  Unknown: 5
 };
 
 function getDefaultTab(phase: PhaseKey): DetailTab {
@@ -90,52 +77,6 @@ function removeOneId(values: string[], id: string) {
   }
 
   return [...values.slice(0, index), ...values.slice(index + 1)];
-}
-
-function getEntitySections(dataset: Dataset): { title: string; kind: EntityKind; options: EntityOption[] }[] {
-  const champions = Object.values(dataset.championsById)
-    .filter((champion) => champion.cost <= 5)
-    .sort((left, right) => left.cost - right.cost || left.name.localeCompare(right.name))
-    .map((champion) => ({
-      kind: "champion" as const,
-      id: champion.id,
-      name: champion.name,
-      icon: champion.icon
-    }));
-  const augments = Object.values(dataset.augmentsById)
-    .sort((left, right) => {
-      const leftTier = AUGMENT_TIER_ORDER[left.tier] ?? AUGMENT_TIER_ORDER.Unknown;
-      const rightTier = AUGMENT_TIER_ORDER[right.tier] ?? AUGMENT_TIER_ORDER.Unknown;
-      return leftTier - rightTier || left.name.localeCompare(right.name);
-    })
-    .map((augment) => ({
-      kind: "augment" as const,
-      id: augment.id,
-      name: augment.name,
-      icon: augment.icon,
-      meta: augment.tier === "Unknown" ? undefined : augment.tier
-    }));
-  const items = Object.values(dataset.itemsById)
-    .sort((left, right) => left.name.localeCompare(right.name))
-    .map((item: Item) => ({
-      kind: "item" as const,
-      id: item.id,
-      name: item.name,
-      icon: item.icon
-    }));
-  const components = Object.entries(COMPONENT_LABELS).map(([componentId, label]) => ({
-    kind: "component" as const,
-    id: componentId,
-    name: label,
-    icon: `${import.meta.env.BASE_URL}assets/items/${componentId}.png`
-  }));
-
-  return [
-    { title: "Champions", kind: "champion", options: champions },
-    { title: "Augments", kind: "augment", options: augments },
-    { title: "Items", kind: "item", options: items },
-    { title: "Components", kind: "component", options: components }
-  ];
 }
 
 function getEntityDisplay(dataset: Dataset, kind: EntityKind, id: string): EntityOption {
@@ -261,6 +202,11 @@ function SimilarityResultRow({
   onQuickFilter: (label: string) => void;
 }) {
   const comp = result.comp;
+  const availableBoardPhases = getNativeBoardPhases(comp);
+  const displayPhase = getPreferredBoardPhase(comp, phase);
+  const safeActivePhase = getPreferredBoardPhase(comp, activePhase);
+  const safeSelectedTab =
+    selectedTab === "overview" || availableBoardPhases.includes(selectedTab) ? selectedTab : ("overview" as const);
   const rank = getCompRankTags(comp)[0];
   const playstyle = getCompPlaystyle(comp);
   const playstyleIcon = getPlaystyleIcon(playstyle);
@@ -293,7 +239,7 @@ function SimilarityResultRow({
 
         <div className="similarity-titleline">
           <h2>{getCompDisplayTitle(comp)}</h2>
-          <span>{phase} unit focus</span>
+          <span>{displayPhase} unit focus</span>
         </div>
 
         <div className="similarity-score">
@@ -314,8 +260,9 @@ function SimilarityResultRow({
           <DetailPane
             comp={comp}
             dataset={dataset}
-            activePhase={activePhase}
-            selectedTab={selectedTab}
+            activePhase={safeActivePhase}
+            selectedTab={safeSelectedTab}
+            availablePhases={availableBoardPhases}
             onActivePhaseChange={onActivePhaseChange}
             onSelectTab={onSelectTab}
             inspector={inspector}
@@ -347,7 +294,7 @@ export function SimilarityView({ comps, dataset, phases, onQuickFilter }: Simila
   const [activePhases, setActivePhases] = useState<Record<string, PhaseKey>>({});
   const [liveInspectors, setLiveInspectors] = useState<Record<string, InspectorTarget>>({});
   const [lockedInspectors, setLockedInspectors] = useState<Record<string, InspectorTarget>>({});
-  const sections = useMemo(() => getEntitySections(dataset), [dataset]);
+  const sections = useMemo(() => getSimilarityEntitySections(dataset), [dataset]);
   const results = useMemo(
     () => rankCompsBySimilarity(comps, dataset, selection, phases),
     [comps, dataset, phases, selection]
@@ -382,20 +329,21 @@ export function SimilarityView({ comps, dataset, phases, onQuickFilter }: Simila
     setSelection((current) => ({ ...current, componentIds: removeOneId(current.componentIds, id) }));
   };
 
-  const ensureRowState = (compId: string) => {
-    setSelectedTabs((current) => (current[compId] ? current : { ...current, [compId]: getDefaultTab(primaryPhase) }));
-    setActivePhases((current) => (current[compId] ? current : { ...current, [compId]: primaryPhase }));
+  const ensureRowState = (comp: Comp) => {
+    const defaultPhase = getPreferredBoardPhase(comp, primaryPhase);
+    setSelectedTabs((current) => (current[comp.id] ? current : { ...current, [comp.id]: getDefaultTab(defaultPhase) }));
+    setActivePhases((current) => (current[comp.id] ? current : { ...current, [comp.id]: defaultPhase }));
   };
 
-  const toggleExpanded = (compId: string) => {
-    ensureRowState(compId);
+  const toggleExpanded = (comp: Comp) => {
+    ensureRowState(comp);
     setExpandedCompIds((current) => {
-      if (current.includes(compId)) {
-        setLiveInspectors((inspectors) => ({ ...inspectors, [compId]: null }));
-        return current.filter((id) => id !== compId);
+      if (current.includes(comp.id)) {
+        setLiveInspectors((inspectors) => ({ ...inspectors, [comp.id]: null }));
+        return current.filter((id) => id !== comp.id);
       }
 
-      return [...current, compId];
+      return [...current, comp.id];
     });
   };
 
@@ -510,6 +458,7 @@ export function SimilarityView({ comps, dataset, phases, onQuickFilter }: Simila
           <div className="similarity-results-list">
             {results.map((result) => {
               const compId = result.comp.id;
+              const defaultPhase = getPreferredBoardPhase(result.comp, primaryPhase);
               return (
                 <SimilarityResultRow
                   key={compId}
@@ -517,11 +466,11 @@ export function SimilarityView({ comps, dataset, phases, onQuickFilter }: Simila
                   dataset={dataset}
                   phase={primaryPhase}
                   isExpanded={expandedCompIds.includes(compId)}
-                  selectedTab={selectedTabs[compId] ?? getDefaultTab(primaryPhase)}
-                  activePhase={activePhases[compId] ?? primaryPhase}
+                  selectedTab={selectedTabs[compId] ?? getDefaultTab(defaultPhase)}
+                  activePhase={activePhases[compId] ?? defaultPhase}
                   inspector={liveInspectors[compId] ?? null}
                   lockedInspector={lockedInspectors[compId] ?? null}
-                  onToggleExpanded={() => toggleExpanded(compId)}
+                  onToggleExpanded={() => toggleExpanded(result.comp)}
                   onSelectTab={(value) => {
                     setSelectedTabs((current) => ({ ...current, [compId]: value }));
                     if (value !== "overview") {

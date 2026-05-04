@@ -82,6 +82,10 @@ export const CHAMPION_NAME_ALIASES: Record<string, string> = {
   luciansenna: "Lucian & Senna"
 };
 
+export const CHAMPION_ID_ALIASES: Record<string, string> = {
+  ivernminion: "meepsie"
+};
+
 export const CHAMPION_ICON_SLUG_ALIASES: Record<string, string> = {
   "dr-mundo": "drmundo",
   "kobuko-and-yuumi": "kobukoyuumi",
@@ -142,7 +146,8 @@ export function normalizeId(value: string | null | undefined): string {
 
 export function normalizeChampionLookup(value: string | null | undefined): string {
   const normalized = normalizeId(value);
-  return CHAMPION_NAME_ALIASES[normalized] ? normalizeId(CHAMPION_NAME_ALIASES[normalized]) : normalized;
+  const nameAlias = CHAMPION_NAME_ALIASES[normalized] ? normalizeId(CHAMPION_NAME_ALIASES[normalized]) : normalized;
+  return CHAMPION_ID_ALIASES[nameAlias] ?? nameAlias;
 }
 
 export function normalizeTierRank(value: string | null | undefined): AugmentRank {

@@ -1,6 +1,7 @@
 import { useState, type CSSProperties } from "react";
 import type { Augment, Champion, Comp, Dataset, GuideSection, Synergy } from "../../shared/tft";
 import type { PhaseKey } from "../../shared/normalization";
+import { getNativeBoardPhases, getPreferredBoardPhase } from "../../shared/phaseAvailability";
 import { getCompPlaystyle, getCompRankTags, getPlaystyleIcon, getPlaystyleLabel } from "../lib/compMeta";
 import { getItemDisplay } from "../lib/items";
 import { RankBadge } from "./RankBadge";
@@ -24,6 +25,7 @@ type DetailPaneProps = {
   dataset: Dataset;
   activePhase: PhaseKey;
   selectedTab: DetailTab;
+  availablePhases?: readonly PhaseKey[];
   onActivePhaseChange: (value: PhaseKey) => void;
   onSelectTab: (value: DetailTab) => void;
   inspector: InspectorTarget;
@@ -35,8 +37,6 @@ type DetailPaneProps = {
   onToggleLock: (target: InspectorTarget) => void;
   onQuickFilter: (label: string) => void;
 };
-
-const DETAIL_OPTIONS: DetailTab[] = ["overview", "early", "mid", "late"];
 
 function humanizeToken(value: string) {
   return value
@@ -85,16 +85,16 @@ export function buildInspectorModel(
     if (!champion) {
       return null;
     }
+    const nativePhases = getNativeBoardPhases(comp);
+    const boardPhases = nativePhases.length ? nativePhases : [activePhase];
     const itemIds = [
       ...new Set(
-        [
-          ...comp.phases[activePhase].boardSlots,
-          ...comp.phases.late.boardSlots,
-          ...comp.phases.mid.boardSlots,
-          ...comp.phases.early.boardSlots
-        ]
-          .filter((slot) => slot.championId === champion.id)
-          .flatMap((slot) => slot.itemIds)
+        champion.recommendedItemIds.length
+          ? champion.recommendedItemIds
+          : boardPhases
+              .flatMap((phase) => comp.phases[phase].boardSlots)
+              .filter((slot) => slot.championId === champion.id)
+              .flatMap((slot) => slot.itemIds)
       )
     ];
     return {
@@ -556,6 +556,7 @@ export function DetailPane({
   dataset,
   activePhase,
   selectedTab,
+  availablePhases,
   onActivePhaseChange,
   onSelectTab,
   inspector,
@@ -568,8 +569,13 @@ export function DetailPane({
   onQuickFilter
 }: DetailPaneProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
-  const phase = comp.phases[activePhase];
-  const activeInspector = buildInspectorModel(comp, dataset, activePhase, lockedInspector ?? inspector);
+  const nativePhases = availablePhases?.length ? [...availablePhases] : getNativeBoardPhases(comp);
+  const safeActivePhase = getPreferredBoardPhase(comp, activePhase);
+  const safeSelectedTab =
+    selectedTab === "overview" || nativePhases.includes(selectedTab) ? selectedTab : ("overview" as const);
+  const detailOptions: DetailTab[] = ["overview", ...nativePhases];
+  const phase = comp.phases[safeActivePhase];
+  const activeInspector = buildInspectorModel(comp, dataset, safeActivePhase, lockedInspector ?? inspector);
   const rankTags = getCompRankTags(comp);
   const playstyle = getCompPlaystyle(comp);
   const playstyleIcon = getPlaystyleIcon(playstyle);
@@ -598,18 +604,18 @@ export function DetailPane({
 
     return counts;
   }, {});
-  const guideSections = selectedTab === "overview" ? comp.guide.overview : comp.guide.phases[selectedTab];
+  const guideSections = safeSelectedTab === "overview" ? comp.guide.overview : comp.guide.phases[safeSelectedTab];
 
   return (
     <div className="detail-embedded">
       <div className="detail-toolbar">
         <div className="detail-tab-cluster">
           <div className="segmented-control phase-tabs">
-            {DETAIL_OPTIONS.map((option) => (
+            {detailOptions.map((option) => (
               <button
                 key={option}
                 type="button"
-                className={option === selectedTab ? "segment active" : "segment"}
+                className={option === safeSelectedTab ? "segment active" : "segment"}
                 aria-label={option === "overview" ? `Show overview for ${comp.title}` : `Show ${option} board for ${comp.title}`}
                 onClick={() => {
                   onSelectTab(option);
@@ -667,7 +673,7 @@ export function DetailPane({
           <div className="section-header">
             <h3>Board view</h3>
             <p>
-              {activePhase} board · {filledBoardSlotCount} units
+              {safeActivePhase} board · {filledBoardSlotCount} units
             </p>
           </div>
           <div className="board-stage">
@@ -698,12 +704,12 @@ export function DetailPane({
         <div className="detail-side-stack">
           <div className="guide-panel">
             <div className="section-header">
-              <h3>{selectedTab === "overview" ? "Overview" : `${selectedTab} plan`}</h3>
+              <h3>{safeSelectedTab === "overview" ? "Overview" : `${safeSelectedTab} plan`}</h3>
               <p>Mobalytics guide notes</p>
             </div>
             {guideSections.length > 0 ? (
-              <div className={selectedTab === "overview" ? "guide-section-grid overview-grid" : "guide-section-grid phase-grid"}>
-                {guideSections.map((section) => renderGuideSection(section, selectedTab))}
+              <div className={safeSelectedTab === "overview" ? "guide-section-grid overview-grid" : "guide-section-grid phase-grid"}>
+                {guideSections.map((section) => renderGuideSection(section, safeSelectedTab))}
               </div>
             ) : (
               <div className="guide-empty">

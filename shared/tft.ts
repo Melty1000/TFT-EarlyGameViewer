@@ -31,6 +31,7 @@ export const championSchema = z.object({
   abilityDesc: z.string().default(""),
   requiresUnlock: z.boolean().default(false),
   unlockCondition: z.string().nullable().default(null),
+  recommendedItemIds: z.array(z.string().min(1)).default([]),
   stats: z.object({
     hp: z.number().nullable(),
     mana: z.number().nullable(),
@@ -68,7 +69,8 @@ export const itemSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   description: z.string().default(""),
-  icon: z.string().min(1)
+  icon: z.string().min(1),
+  recipeIds: z.tuple([z.string().min(1), z.string().min(1)]).optional()
 });
 
 export const guideSectionSchema = z.object({

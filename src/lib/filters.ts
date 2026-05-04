@@ -1,9 +1,10 @@
 import type { Comp, Dataset } from "../../shared/tft";
+import { getNativeBoardPhases, hasNativeBoardPhase } from "../../shared/phaseAvailability";
 
 export type PhaseFilter = "all" | "early" | "mid" | "late";
 
 function getSearchHaystack(comp: Comp, dataset: Dataset, phase: PhaseFilter): string[] {
-  const phaseKeys = phase === "all" ? (["early", "mid", "late"] as const) : [phase];
+  const phaseKeys = phase === "all" ? getNativeBoardPhases(comp) : hasNativeBoardPhase(comp, phase) ? [phase] : [];
   const tokens = [comp.title];
 
   for (const phaseKey of phaseKeys) {
@@ -38,6 +39,10 @@ export function compMatchesFilters(
   chips: string[],
   liveQuery: string
 ): boolean {
+  if (phase !== "all" && !hasNativeBoardPhase(comp, phase)) {
+    return false;
+  }
+
   const searchTokens = [...chips, ...tokenizeSearch(liveQuery)];
   if (searchTokens.length === 0) {
     return true;

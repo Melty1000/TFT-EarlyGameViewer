@@ -27,7 +27,12 @@ function getEmblemSynergy(dataset: Dataset, itemId: string) {
   );
 }
 
-export function getItemRecipeIds(itemId: string): [string, string] | null {
+export function getItemRecipeIds(itemId: string, dataset?: Dataset): [string, string] | null {
+  const datasetRecipe = dataset?.itemsById?.[itemId]?.recipeIds;
+  if (datasetRecipe?.length === 2) {
+    return [datasetRecipe[0], datasetRecipe[1]];
+  }
+
   for (const candidate of getRecipeKeyCandidates(itemId)) {
     const recipe = COMPONENT_RECIPES[candidate];
     if (recipe) {
@@ -41,7 +46,7 @@ export function getItemRecipeIds(itemId: string): [string, string] | null {
 export function getItemDisplay(dataset: Dataset, itemId: string): ItemDisplay {
   const item = dataset.itemsById?.[itemId];
   const emblemSynergy = item ? null : getEmblemSynergy(dataset, itemId);
-  const recipeIds = (getItemRecipeIds(itemId) ?? []).slice(0, 2);
+  const recipeIds = (getItemRecipeIds(itemId, dataset) ?? []).slice(0, 2);
 
   return {
     id: itemId,

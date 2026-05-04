@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { Comp, Dataset } from "../../shared/tft";
 import type { PhaseKey } from "../../shared/normalization";
+import { getNativeBoardPhases, getPreferredBoardPhase } from "../../shared/phaseAvailability";
 import {
   getCompDisplayTitle,
   getCompPlaystyle,
@@ -74,6 +75,14 @@ function getDefaultDetailTab(phaseFilter: PhaseFilter): DetailTab {
 
 function getDefaultBoardPhase(phaseFilter: PhaseFilter): PhaseKey {
   return phaseFilter === "all" ? "late" : phaseFilter;
+}
+
+function getSafeDetailTab(comp: Comp, selectedTab: DetailTab, availablePhases: readonly PhaseKey[]): DetailTab {
+  if (selectedTab === "overview" || availablePhases.includes(selectedTab)) {
+    return selectedTab;
+  }
+
+  return "overview";
 }
 
 function compareRows(left: CompRow, right: CompRow, sortKey: SortKey, similarityReadouts: SimilarityReadouts = {}) {
@@ -252,13 +261,11 @@ function ComponentDemandStrip({ comp, showLabels = false }: { comp: Comp; showLa
 
 function SourceCell({ comp }: { comp: Comp }) {
   const sourceName = comp.sources[0]?.name ?? "source";
-  const evidenceCount = comp.sources[0]?.evidence.length ?? 0;
 
   return (
     <div className="source-cell-label" title={getSourceDisplayName(sourceName)}>
       <span className="source-code">{getSourceAbbreviation(sourceName)}</span>
       <span className="source-full">{getSourceDisplayName(sourceName)}</span>
-      <span className="source-evidence-count">{evidenceCount ? `${evidenceCount} signals` : "no evidence"}</span>
     </div>
   );
 }
@@ -396,7 +403,7 @@ export function CompListPane({
     setExpandedCompIds((current) => current.filter((id) => visibleIds.has(id)));
   }, [rows]);
 
-  const previewPhase = getPreviewPhase(phaseFilter);
+  const requestedPreviewPhase = getPreviewPhase(phaseFilter);
   const sortedRows = useMemo(() => {
     if (lockSort) {
       return rows;
@@ -431,34 +438,36 @@ export function CompListPane({
     </button>
   );
 
-  const ensureRowState = (compId: string) => {
+  const ensureRowState = (comp: Comp) => {
+    const defaultPhase = getPreferredBoardPhase(comp, getDefaultBoardPhase(phaseFilter));
+    const defaultTab: DetailTab = phaseFilter === "all" ? "overview" : defaultPhase;
     setSelectedTabs((current) =>
-      current[compId] ? current : { ...current, [compId]: getDefaultDetailTab(phaseFilter) }
+      current[comp.id] ? current : { ...current, [comp.id]: defaultTab }
     );
     setActivePhases((current) =>
-      current[compId] ? current : { ...current, [compId]: getDefaultBoardPhase(phaseFilter) }
+      current[comp.id] ? current : { ...current, [comp.id]: defaultPhase }
     );
   };
 
-  const toggleExpanded = (compId: string) => {
-    ensureRowState(compId);
+  const toggleExpanded = (comp: Comp) => {
+    ensureRowState(comp);
     setExpandedCompIds((current) => {
-      if (current.includes(compId)) {
-        setLiveInspectors((inspectors) => ({ ...inspectors, [compId]: null }));
-        return current.filter((id) => id !== compId);
+      if (current.includes(comp.id)) {
+        setLiveInspectors((inspectors) => ({ ...inspectors, [comp.id]: null }));
+        return current.filter((id) => id !== comp.id);
       }
 
-      return [...current, compId];
+      return [...current, comp.id];
     });
   };
 
-  const activateRow = (compId: string) => {
+  const activateRow = (comp: Comp) => {
     if (usesSelectionMode) {
-      onSelectComp?.(compId);
+      onSelectComp?.(comp.id);
       return;
     }
 
-    toggleExpanded(compId);
+    toggleExpanded(comp);
   };
 
   return (
@@ -501,6 +510,8 @@ export function CompListPane({
 
         {sortedRows.map((row) => {
           const comp = row.comp;
+          const availableBoardPhases = getNativeBoardPhases(comp);
+          const previewPhase = getPreferredBoardPhase(comp, requestedPreviewPhase);
           const previewChampionIds = comp.phases[previewPhase].boardSlots
             .map((slot) => slot.championId)
             .filter((championId): championId is string => Boolean(championId));
@@ -510,13 +521,16 @@ export function CompListPane({
           const playstyle = getCompPlaystyle(comp);
           const isExpanded = usesSelectionMode ? false : expandedCompIds.includes(row.key);
           const isSelected = selectedCompId === row.key;
-          const selectedTab = selectedTabs[row.key] ?? getDefaultDetailTab(phaseFilter);
-          const activePhase = activePhases[row.key] ?? getDefaultBoardPhase(phaseFilter);
+          const selectedTab = getSafeDetailTab(
+            comp,
+            selectedTabs[row.key] ?? getDefaultDetailTab(phaseFilter),
+            availableBoardPhases
+          );
+          const activePhase = getPreferredBoardPhase(comp, activePhases[row.key] ?? getDefaultBoardPhase(phaseFilter));
           const liveInspector = liveInspectors[row.key] ?? null;
           const lockedInspector = lockedInspectors[row.key] ?? null;
           const sourceName = comp.sources[0]?.name ?? "source";
           const sourceDisplayName = getSourceDisplayName(sourceName);
-          const evidenceCount = comp.sources[0]?.evidence.length ?? 0;
           const similarityReadout = similarityReadouts[comp.id];
 
           return (
@@ -539,11 +553,11 @@ export function CompListPane({
                 className="row-header-trigger"
                 aria-expanded={usesSelectionMode ? undefined : isExpanded}
                 aria-label={usesSelectionMode ? `Select comp ${row.title}` : `Toggle comp ${row.title}`}
-                onClick={() => activateRow(row.key)}
+                onClick={() => activateRow(comp)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    activateRow(row.key);
+                    activateRow(comp);
                   }
                 }}
               >
@@ -561,7 +575,6 @@ export function CompListPane({
                           [ {sourceDisplayName} ]
                         </span>
                         <span className="selection-phase-readout">[ {previewPhase} / {previewChampions.length} ]</span>
-                        <span className="selection-evidence-readout">[ {evidenceCount} evidence ]</span>
                         {similarityReadout ? (
                           <strong className="selection-similarity-readout">
                             [ SIM {similarityReadout.score} / {similarityReadout.percent}% ]
@@ -712,6 +725,7 @@ export function CompListPane({
                       });
                     }}
                     onQuickFilter={onQuickFilter}
+                    availablePhases={availableBoardPhases}
                   />
                 </div>
               ) : null}

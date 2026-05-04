@@ -7,12 +7,15 @@ import {
   AUGMENT_RANKS,
   COMPONENT_LABELS,
   COMPONENT_RECIPES,
+  PHASES,
   normalizeAugmentLookup,
   normalizeChampionLookup,
   normalizeId,
   normalizeTierRank,
-  titleCaseFromSlug
+  titleCaseFromSlug,
+  type PhaseKey
 } from "../shared/normalization";
+import { phaseHasBoardData } from "../shared/phaseAvailability";
 import {
   datasetSchema,
   type BoardSlot,
@@ -26,7 +29,6 @@ import {
 } from "../shared/tft";
 
 type SourceName = "tftacademy" | "mobalytics" | "tftactics" | "tftflow" | "metatft";
-type PhaseKey = "early" | "mid" | "late";
 
 type SourceUnit = {
   championId: string;
@@ -211,6 +213,7 @@ type MobalyticsLookups = {
       abilityDesc: string;
       requiresUnlock: boolean;
       unlockCondition: string | null;
+      recommendedItemIds: string[];
       role?: string;
       stats: {
         hp: number | null;
@@ -230,6 +233,7 @@ type MobalyticsLookups = {
 };
 
 const CURRENT_SET = 17;
+const MOBALYTICS_MAX_RECOMMENDED_ITEMS_PER_CHAMPION = 8;
 const DATASET_FILE = `tft-set${CURRENT_SET}.json`;
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
@@ -261,7 +265,9 @@ const COMPONENT_API_TO_ID: Record<string, string> = {
   TFT_Item_ChainVest: "chain-vest",
   TFT_Item_NegatronCloak: "negatron-cloak",
   TFT_Item_GiantsBelt: "giants-belt",
-  TFT_Item_SparringGloves: "sparring-gloves"
+  TFT_Item_SparringGloves: "sparring-gloves",
+  TFT_Item_Spatula: "spatula",
+  TFT_Item_FryingPan: "frying-pan"
 };
 
 const MOBALYTICS_COMPONENT_SLUG_TO_ID: Record<string, string> = {
@@ -676,6 +682,7 @@ function buildCatalogs(cdragon: CDragonTftData, mobalytics: MobalyticsLookups, t
       continue;
     }
 
+    const mobalyticsChampion = mobalytics.championsById[id];
     const unlock = mobalytics.championUnlocksById[id];
     championRoles[id] = champion.role ?? "";
     championsById[id] = {
@@ -687,6 +694,7 @@ function buildCatalogs(cdragon: CDragonTftData, mobalytics: MobalyticsLookups, t
       abilityDesc: cleanGameText(champion.ability?.desc) || "",
       requiresUnlock: unlock?.requiresUnlock ?? false,
       unlockCondition: unlock?.unlockCondition ?? null,
+      recommendedItemIds: mobalyticsChampion?.recommendedItemIds ?? [],
       stats: {
         hp: champion.stats?.hp ?? null,
         mana: champion.stats?.mana ?? null,
@@ -694,7 +702,12 @@ function buildCatalogs(cdragon: CDragonTftData, mobalytics: MobalyticsLookups, t
         damage: champion.stats?.damage ?? null,
         range: champion.stats?.range ?? null
       },
-      icon: queueAsset(assetDownloads, cdragonAssetUrl(champion.tileIcon ?? champion.squareIcon ?? champion.icon), "champions", id)
+      icon: queueAsset(
+        assetDownloads,
+        mobalyticsChampion?.iconUrl ?? cdragonAssetUrl(champion.tileIcon ?? champion.squareIcon ?? champion.icon),
+        "champions",
+        id
+      )
     };
   }
 
@@ -713,6 +726,7 @@ function buildCatalogs(cdragon: CDragonTftData, mobalytics: MobalyticsLookups, t
       abilityDesc: champion.abilityDesc,
       requiresUnlock: champion.requiresUnlock,
       unlockCondition: champion.unlockCondition,
+      recommendedItemIds: champion.recommendedItemIds,
       stats: champion.stats,
       icon: queueAsset(assetDownloads, champion.iconUrl, "champions", id)
     };
@@ -767,7 +781,8 @@ function buildCatalogs(cdragon: CDragonTftData, mobalytics: MobalyticsLookups, t
       id,
       name: itemName,
       description: cleanGameText(item.desc),
-      icon: queueAsset(assetDownloads, cdragonAssetUrl(item.icon), "items", id)
+      icon: queueAsset(assetDownloads, cdragonAssetUrl(item.icon), "items", id),
+      ...(itemRecipeById[id] ? { recipeIds: itemRecipeById[id] } : {})
     };
   }
 
@@ -908,6 +923,221 @@ function buildMobalyticsItemIdBySlug(stat: Record<string, any>) {
     }
   }
   return itemIdBySlug;
+}
+
+function mobalyticsItemIdFromRecord(item: any, itemIdBySlug: Record<string, string>): string {
+  const flatItem = item?.flatData ?? item;
+  const normalizedSlug = normalizeId(flatItem?.slug);
+  return itemIdBySlug[normalizedSlug] ?? mobalyticsCanonicalItemId(flatItem?.slug, flatItem?.name);
+}
+
+function mobalyticsRecommendedItemIds(champion: any, itemIdBySlug: Record<string, string>): string[] {
+  return [
+    ...new Set<string>(
+      (champion.recommendedItems ?? [])
+        .map((item: any) => mobalyticsItemIdFromRecord(item, itemIdBySlug))
+        .filter((itemId: string): itemId is string => Boolean(itemId))
+    )
+  ];
+}
+
+type MobalyticsChampionSeed = { id: string; slug: string };
+type MobalyticsRecommendedItemScore = {
+  itemId: string;
+  count: number;
+  firstSeen: number;
+};
+type MobalyticsRecommendedItemScoresByChampion = Record<
+  string,
+  Record<string, MobalyticsRecommendedItemScore>
+>;
+
+function addMobalyticsRecommendedItems(
+  scoresByChampion: MobalyticsRecommendedItemScoresByChampion,
+  championSlug: string | null | undefined,
+  rawItems: any[] | null | undefined,
+  itemIdBySlug: Record<string, string>,
+  sequence: { current: number }
+) {
+  const championId = championIdFromName(championSlug);
+  if (!championId || !Array.isArray(rawItems) || rawItems.length === 0) {
+    return;
+  }
+
+  const seenInHolder = new Set<string>();
+  for (const rawItem of rawItems) {
+    const itemId = mobalyticsItemIdFromRecord(rawItem, itemIdBySlug);
+    if (!itemId || seenInHolder.has(itemId)) {
+      continue;
+    }
+    seenInHolder.add(itemId);
+
+    const scores = (scoresByChampion[championId] ??= {});
+    const existing = scores[itemId];
+    if (existing) {
+      existing.count += 1;
+    } else {
+      scores[itemId] = { itemId, count: 1, firstSeen: sequence.current };
+      sequence.current += 1;
+    }
+  }
+}
+
+function collectMobalyticsFormationRecommendedItems(
+  scoresByChampion: MobalyticsRecommendedItemScoresByChampion,
+  formation: any,
+  itemIdBySlug: Record<string, string>,
+  sequence: { current: number }
+) {
+  for (const position of formation?.positions ?? []) {
+    const championWithItems = position?.champion;
+    addMobalyticsRecommendedItems(
+      scoresByChampion,
+      championWithItems?.champion?.slug ?? championWithItems?.champion?.name,
+      championWithItems?.items,
+      itemIdBySlug,
+      sequence
+    );
+  }
+}
+
+function collectMobalyticsCompRecommendedItems(
+  scoresByChampion: MobalyticsRecommendedItemScoresByChampion,
+  comp: any,
+  itemIdBySlug: Record<string, string>,
+  sequence: { current: number }
+) {
+  const guide = comp?.guide;
+  collectMobalyticsFormationRecommendedItems(scoresByChampion, comp?.formation, itemIdBySlug, sequence);
+  collectMobalyticsFormationRecommendedItems(scoresByChampion, guide?.early?.formation, itemIdBySlug, sequence);
+  collectMobalyticsFormationRecommendedItems(scoresByChampion, guide?.mid?.formation, itemIdBySlug, sequence);
+
+  for (const championWithItems of guide?.alternatives?.items ?? []) {
+    addMobalyticsRecommendedItems(
+      scoresByChampion,
+      championWithItems?.champion?.slug ?? championWithItems?.champion?.name,
+      championWithItems?.items,
+      itemIdBySlug,
+      sequence
+    );
+  }
+}
+
+function rankedMobalyticsRecommendedItemIds(scores: Record<string, MobalyticsRecommendedItemScore> | undefined) {
+  return Object.values(scores ?? {})
+    .sort((left, right) => right.count - left.count || left.firstSeen - right.firstSeen)
+    .map((score) => score.itemId);
+}
+
+function mergeMobalyticsRecommendedItemIds(primaryIds: string[], secondaryIds: string[]) {
+  const merged: string[] = [];
+  const seen = new Set<string>();
+  for (const itemId of [...primaryIds, ...secondaryIds]) {
+    if (!itemId || seen.has(itemId)) {
+      continue;
+    }
+    seen.add(itemId);
+    merged.push(itemId);
+    if (merged.length >= MOBALYTICS_MAX_RECOMMENDED_ITEMS_PER_CHAMPION) {
+      break;
+    }
+  }
+  return merged;
+}
+
+async function loadMobalyticsChampionPageRecommendedItemIds(
+  champions: MobalyticsChampionSeed[],
+  itemIdBySlug: Record<string, string>
+) {
+  const scoresByChampion: MobalyticsRecommendedItemScoresByChampion = {};
+  const sequence = { current: 0 };
+  const processedCompositionIds = new Set<string>();
+
+  await mapWithConcurrency(champions, 8, async (champion) => {
+    try {
+      const url = `https://mobalytics.gg/tft/champions/${champion.slug}`;
+      const state = extractPreloadedState(await fetchTextWithRetries(url));
+      const dynamic = state.tftState?.apollo?.dynamic ?? {};
+      const stat = state.tftState?.apollo?.static ?? {};
+      const allCache = { ...stat, ...dynamic };
+
+      for (const [key, raw] of Object.entries(dynamic)) {
+        if (!key.startsWith("TftComposition:")) {
+          continue;
+        }
+
+        const comp = derefApollo(allCache, raw);
+        const compositionId = cleanText(comp?.id ?? comp?.guide?.compositionId ?? key);
+        if (compositionId && processedCompositionIds.has(compositionId)) {
+          continue;
+        }
+        if (compositionId) {
+          processedCompositionIds.add(compositionId);
+        }
+
+        collectMobalyticsCompRecommendedItems(scoresByChampion, comp, itemIdBySlug, sequence);
+      }
+    } catch (error) {
+      console.warn(`Mobalytics champion item scrape failed for ${champion.slug}:`, error);
+    }
+  });
+
+  return Object.fromEntries(
+    Object.entries(scoresByChampion).map(([championId, scores]) => [
+      championId,
+      rankedMobalyticsRecommendedItemIds(scores)
+    ])
+  );
+}
+
+export function extractMobalyticsLevelingLines(tag: any, cache?: Record<string, any>): string[] {
+  const levelling = Array.isArray(tag?.levelling) ? tag.levelling : Array.isArray(tag?.leveling) ? tag.leveling : [];
+
+  return levelling
+    .map((rawEntry: any) => {
+      const entry = cache ? derefApollo(cache, rawEntry) : rawEntry;
+      const level = Number(entry?.level);
+      const stage = cleanText(entry?.stage ?? entry?.round);
+      if (!Number.isFinite(level) || !stage) {
+        return "";
+      }
+
+      const gold = Number(entry?.preserveMoney ?? entry?.minimumGold ?? entry?.minGold ?? entry?.gold);
+      const goldText = Number.isFinite(gold) ? ` with ${Math.round(gold)}+ gold` : "";
+      const description = cleanText(entry?.description ?? entry?.note);
+      return `Level ${Math.round(level)} at ${stage}${goldText}${description ? ` - ${description}` : ""}`;
+    })
+    .filter(Boolean);
+}
+
+function buildMobalyticsLevelingLinesByPlaystyle(stat: Record<string, any>, allCache: Record<string, any>) {
+  const levelingLinesByPlaystyle: Record<string, string[]> = {};
+
+  for (const [key, raw] of Object.entries(stat)) {
+    if (!key.startsWith("TeamCompTagsV1")) {
+      continue;
+    }
+
+    const tagRecord = derefApollo(allCache, raw);
+    const tag = derefApollo(allCache, tagRecord.flatData ?? tagRecord);
+    if (tag.gameSet && tag.gameSet !== `set${CURRENT_SET}`) {
+      continue;
+    }
+
+    const lines = extractMobalyticsLevelingLines(tag, allCache);
+    if (!lines.length) {
+      continue;
+    }
+
+    for (const value of [tag.slug, tag.label, tag.name]) {
+      const lookupKey = normalizeId(value);
+      if (lookupKey) {
+        levelingLinesByPlaystyle[lookupKey] = lines;
+      }
+    }
+  }
+
+  return levelingLinesByPlaystyle;
 }
 
 function normalizeSourceUnits(
@@ -1071,6 +1301,7 @@ async function loadMobalyticsLookups(): Promise<MobalyticsLookups> {
   const augmentNameByApi: Record<string, string> = {};
   const augmentDescriptionByApi: Record<string, string> = {};
   const itemIdBySlug = buildMobalyticsItemIdBySlug(stat);
+  const levelingLinesByPlaystyle = buildMobalyticsLevelingLinesByPlaystyle(stat, allCache);
   for (const [key, raw] of Object.entries(stat)) {
     if (!key.startsWith("HextechAugmentsDataFlatDto")) {
       continue;
@@ -1094,6 +1325,7 @@ async function loadMobalyticsLookups(): Promise<MobalyticsLookups> {
 
   const championUnlocksById: MobalyticsLookups["championUnlocksById"] = {};
   const championsById: MobalyticsLookups["championsById"] = {};
+  const championPageSeeds: MobalyticsChampionSeed[] = [];
   for (const [key, raw] of Object.entries(stat)) {
     if (!key.startsWith("ChampionsV1DataFlatDto")) {
       continue;
@@ -1123,6 +1355,7 @@ async function loadMobalyticsLookups(): Promise<MobalyticsLookups> {
       abilityDesc: cleanGameText(ability.description),
       requiresUnlock: Boolean(champion.isUnlockable || champion.unlockCondition),
       unlockCondition: cleanText(champion.unlockCondition) || null,
+      recommendedItemIds: mobalyticsRecommendedItemIds(champion, itemIdBySlug),
       role: cleanText(champion.role),
       stats: {
         hp: numberOrNull(champion.health ?? champion.hp),
@@ -1133,6 +1366,21 @@ async function loadMobalyticsLookups(): Promise<MobalyticsLookups> {
       },
       iconUrl: slug ? `https://cdn.mobalytics.gg/assets/tft/images/champions/icons/set${CURRENT_SET}/${slug}.png?v=5` : null
     };
+    if (slug) {
+      championPageSeeds.push({ id, slug });
+    }
+  }
+
+  const championPageRecommendedItemsById = await loadMobalyticsChampionPageRecommendedItemIds(
+    championPageSeeds,
+    itemIdBySlug
+  );
+  for (const [championId, recommendedItemIds] of Object.entries(championPageRecommendedItemsById)) {
+    const champion = championsById[championId];
+    if (!champion) {
+      continue;
+    }
+    champion.recommendedItemIds = mergeMobalyticsRecommendedItemIds(champion.recommendedItemIds, recommendedItemIds);
   }
 
   const comps = await hydrateMobalyticsDetailComps(
@@ -1165,6 +1413,7 @@ async function loadMobalyticsLookups(): Promise<MobalyticsLookups> {
         finalUnits,
         augments,
         tips: comp.description ? [{ stage: "Overview", tip: comp.description }] : [],
+        levelingLines: levelingLinesByPlaystyle[normalizeId(comp.playstyle)],
         createdAt: comp.createdAt,
         updatedAt: comp.updatedAt
       } satisfies SourceComp;
@@ -1924,38 +2173,6 @@ function uniqueUnits(units: SourceUnit[]) {
   });
 }
 
-function fallbackEarlyUnits(finalUnits: SourceUnit[], catalogs: Pick<Catalogs, "championsById">) {
-  return uniqueUnits(finalUnits)
-    .sort((left, right) => {
-      const leftCost = catalogs.championsById[left.championId]?.cost ?? 9;
-      const rightCost = catalogs.championsById[right.championId]?.cost ?? 9;
-      return leftCost - rightCost;
-    })
-    .slice(0, 4)
-    .map((unit) => ({ championId: unit.championId, itemIds: unit.itemIds.slice(0, 1) }));
-}
-
-function fallbackMidUnits(earlyUnits: SourceUnit[], finalUnits: SourceUnit[], catalogs: Pick<Catalogs, "championsById">) {
-  const result = [...earlyUnits];
-  const seen = new Set(result.map((unit) => unit.championId));
-  const targetCount = 6;
-  for (const unit of uniqueUnits(finalUnits).sort((left, right) => {
-    const leftCost = catalogs.championsById[left.championId]?.cost ?? 9;
-    const rightCost = catalogs.championsById[right.championId]?.cost ?? 9;
-    return leftCost - rightCost;
-  })) {
-    if (seen.has(unit.championId)) {
-      continue;
-    }
-    result.push({ championId: unit.championId, itemIds: unit.itemIds.slice(0, 2), boardIndex: unit.boardIndex });
-    seen.add(unit.championId);
-    if (result.length >= targetCount) {
-      break;
-    }
-  }
-  return result;
-}
-
 function unitsToPhaseData(
   sourceUnits: SourceUnit[],
   catalogs: Pick<Catalogs, "championsById" | "synergiesById" | "championRoles">
@@ -2352,33 +2569,53 @@ function localItemIconForId(itemId: string) {
   return match ? toWebPath("assets", "items", match) : toWebPath("assets", "items", "missingno.png");
 }
 
+function withRecipeIds(itemId: string, item: Dataset["itemsById"][string], catalogs: Pick<Catalogs, "itemRecipeById">) {
+  const recipeIds = catalogs.itemRecipeById[itemId] ?? catalogs.itemRecipeById[item.id] ?? item.recipeIds;
+  return recipeIds ? { ...item, recipeIds } : item;
+}
+
+function getAlwaysShippedItemIds(catalogs: Pick<Catalogs, "itemsById" | "synergiesById">) {
+  return Object.values(catalogs.itemsById)
+    .filter((item) => /emblem$/i.test(item.name) && findEmblemSynergy(item.id, catalogs.synergiesById))
+    .map((item) => item.id);
+}
+
 function buildUsedItemsById(usedItemIds: Set<string>, catalogs: Catalogs): Dataset["itemsById"] {
   const itemsById: Dataset["itemsById"] = {};
+  const itemIdsToShip = new Set([...usedItemIds, ...getAlwaysShippedItemIds(catalogs)]);
 
-  for (const itemId of usedItemIds) {
+  for (const itemId of itemIdsToShip) {
     const existing = findCatalogItemForUsedId(itemId, catalogs);
     if (existing) {
-      itemsById[itemId] = { ...existing, id: itemId };
+      itemsById[itemId] = withRecipeIds(itemId, { ...existing, id: itemId }, catalogs);
       continue;
     }
 
     const synergy = findEmblemSynergy(itemId, catalogs.synergiesById);
     if (synergy) {
-      itemsById[itemId] = {
-        id: itemId,
-        name: `${synergy.name} Emblem`,
-        description: `Counts as ${synergy.name}.`,
-        icon: synergy.icon
-      };
+      itemsById[itemId] = withRecipeIds(
+        itemId,
+        {
+          id: itemId,
+          name: `${synergy.name} Emblem`,
+          description: `Counts as ${synergy.name}.`,
+          icon: synergy.icon
+        },
+        catalogs
+      );
       continue;
     }
 
-    itemsById[itemId] = {
-      id: itemId,
-      name: COMPONENT_LABELS[itemId] ?? titleCaseFromSlug(itemId),
-      description: "",
-      icon: localItemIconForId(itemId)
-    };
+    itemsById[itemId] = withRecipeIds(
+      itemId,
+      {
+        id: itemId,
+        name: COMPONENT_LABELS[itemId] ?? titleCaseFromSlug(itemId),
+        description: "",
+        icon: localItemIconForId(itemId)
+      },
+      catalogs
+    );
   }
 
   return itemsById;
@@ -2386,8 +2623,8 @@ function buildUsedItemsById(usedItemIds: Set<string>, catalogs: Catalogs): Datas
 
 function buildCompFromSourceComp(comp: SourceComp, catalogs: Catalogs, capturedAt: string): Comp {
   const finalUnits = comp.finalUnits?.length ? comp.finalUnits : comp.units;
-  const earlyUnits = comp.earlyUnits?.length ? comp.earlyUnits : fallbackEarlyUnits(finalUnits, catalogs);
-  const midUnits = comp.midUnits?.length ? comp.midUnits : fallbackMidUnits(earlyUnits, finalUnits, catalogs);
+  const earlyUnits = comp.earlyUnits?.length ? comp.earlyUnits : [];
+  const midUnits = comp.midUnits?.length ? comp.midUnits : [];
   const providerName = sourceDisplayName(comp.source);
   const sourceEvidence = buildProviderEvidence(comp, catalogs);
   const sourceProvenance = buildProviderProvenance(comp, capturedAt);
@@ -2539,11 +2776,14 @@ export async function buildDataset() {
   ) as Dataset["synergiesById"];
 
   const usedItemIds = new Set(
-    comps.flatMap((comp) =>
-      (["early", "mid", "late"] as const).flatMap((phase) =>
-        comp.phases[phase].boardSlots.flatMap((slot) => slot.itemIds)
-      )
-    )
+    [
+      ...comps.flatMap((comp) =>
+        (["early", "mid", "late"] as const).flatMap((phase) =>
+          comp.phases[phase].boardSlots.flatMap((slot) => slot.itemIds)
+        )
+      ),
+      ...Object.values(catalogs.championsById).flatMap((champion) => champion.recommendedItemIds)
+    ]
   );
   const itemsById = buildUsedItemsById(usedItemIds, catalogs);
 
@@ -2585,6 +2825,7 @@ export function validateDataset(dataset: Dataset) {
     }
 
     const source = comp.sources[0];
+    const providerBoardPhases = new Set<PhaseKey>();
     if (source) {
       if (!source.provenance) {
         problems.push(`${comp.title} is missing provider provenance.`);
@@ -2607,11 +2848,20 @@ export function validateDataset(dataset: Dataset) {
         if (!evidenceKinds.has("augment")) {
           problems.push(`${comp.title} provider-native evidence is missing augment data.`);
         }
+
+        for (const entry of source.evidence) {
+          if (entry.kind === "board" && PHASES.includes(entry.phase as PhaseKey)) {
+            providerBoardPhases.add(entry.phase as PhaseKey);
+          }
+        }
       }
     }
 
-    for (const phaseKey of ["early", "mid", "late"] as const) {
+    for (const phaseKey of PHASES) {
       const phase = comp.phases[phaseKey];
+      if (phaseHasBoardData(phase) && providerBoardPhases.size > 0 && !providerBoardPhases.has(phaseKey)) {
+        problems.push(`${comp.title} ${phaseKey} phase has board data without provider board evidence.`);
+      }
       if (phase.boardSlots.length !== 28) {
         problems.push(`${comp.title} ${phaseKey} phase does not contain 28 board slots.`);
       }
@@ -2662,6 +2912,14 @@ export function validateDataset(dataset: Dataset) {
     ...Object.values(checkedDataset.synergiesById),
     ...Object.values(checkedDataset.itemsById)
   ];
+
+  for (const champion of Object.values(checkedDataset.championsById)) {
+    for (const itemId of champion.recommendedItemIds) {
+      if (!checkedDataset.itemsById[itemId]) {
+        problems.push(`${champion.name} recommends missing item ${itemId}.`);
+      }
+    }
+  }
 
   for (const asset of assetGroups) {
     if (asset.icon.startsWith("http")) {

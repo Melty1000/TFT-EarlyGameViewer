@@ -105,6 +105,35 @@ describe("similarity scoring", () => {
     expect(lateScores[0].breakdown.champions.matched).toEqual(["ahri"]);
   });
 
+  it("scores duplicate Meepsie ids through the canonical champion identity", () => {
+    const ivernMeepsie = comp("ivern-meepsie", {
+      early: phase(["ivernminion"]),
+      mid: phase([]),
+      late: phase([])
+    });
+    ivernMeepsie.sources[0].evidence = [
+      {
+        kind: "board",
+        label: "early board",
+        value: "Meepsie",
+        phase: "early",
+        providerField: "earlyUnits",
+        confidence: 1
+      }
+    ];
+    const selection: SimilaritySelection = {
+      championIds: ["meepsie"],
+      augmentIds: [],
+      itemIds: [],
+      componentIds: []
+    };
+
+    const result = scoreCompSimilarity(ivernMeepsie, dataset, selection, "early");
+
+    expect(result.breakdown.champions.matched).toEqual(["meepsie"]);
+    expect(result.score).toBeGreaterThan(0);
+  });
+
   it("scores selected champions against the union of multiple selected phase boards without double-counting", () => {
     const multiPhaseMatch = comp("multi-phase-match", {
       early: phase(["ahri"]),
@@ -134,6 +163,36 @@ describe("similarity scoring", () => {
     expect(topResult.breakdown.champions.matched).toEqual(["ahri", "zed"]);
     expect(topResult.breakdown.champions.score).toBe(10);
     expect(bottomResult.breakdown.champions.matched).toEqual([]);
+  });
+
+  it("ignores board phases that are not backed by provider board evidence", () => {
+    const sourceTruthComp = comp("source-truth", {
+      early: phase(["ahri"]),
+      mid: phase([]),
+      late: phase(["zed"])
+    });
+    sourceTruthComp.sources[0].evidence = [
+      {
+        kind: "board",
+        label: "late board",
+        value: "Zed",
+        phase: "late",
+        providerField: "finalUnits",
+        confidence: 1
+      }
+    ];
+    const selection: SimilaritySelection = {
+      championIds: ["ahri", "zed"],
+      augmentIds: [],
+      itemIds: [],
+      componentIds: []
+    };
+
+    const earlyResult = scoreCompSimilarity(sourceTruthComp, dataset, selection, "early");
+    const lateResult = scoreCompSimilarity(sourceTruthComp, dataset, selection, "late");
+
+    expect(earlyResult.breakdown.champions.matched).toEqual([]);
+    expect(lateResult.breakdown.champions.matched).toEqual(["zed"]);
   });
 
   it("scores completed items against every phase board, regardless of selected phase", () => {

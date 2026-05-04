@@ -24,6 +24,7 @@ export type PanelLayout = Record<DraggablePanelId, PanelLayoutEntry>;
 export type ResizeHandle = "left" | "right" | "top" | "bottom" | "corner";
 
 const PANEL_STORAGE_KEY = "opnr:aptos-panel-layout:v1";
+const PANEL_LOCK_STORAGE_KEY = "opnr:aptos-panel-lock:v1";
 const PANEL_LIVE_LAYOUT_EVENT = "opnr:aptos-panel-live-layout";
 const PANEL_DRAG_SURFACE_SELECTOR = "[data-panel-drag-surface]";
 const PANEL_COLLAPSE_BUTTON_SELECTOR = ".dot-test-panel-collapse-button, .aptos-panel-collapse-button";
@@ -530,8 +531,26 @@ function saveLayout(layout: PanelLayout) {
   window.localStorage.setItem(PANEL_STORAGE_KEY, JSON.stringify(layout));
 }
 
+function getStoredLayoutLock() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return window.localStorage.getItem(PANEL_LOCK_STORAGE_KEY) === "locked";
+}
+
+function saveLayoutLock(isLocked: boolean) {
+  if (isLocked) {
+    window.localStorage.setItem(PANEL_LOCK_STORAGE_KEY, "locked");
+    return;
+  }
+
+  window.localStorage.removeItem(PANEL_LOCK_STORAGE_KEY);
+}
+
 export function useDraggablePanels() {
   const [layout, setLayout] = useState<PanelLayout>(() => getStoredLayout());
+  const [isLayoutLocked, setIsLayoutLocked] = useState(() => getStoredLayoutLock());
   const [draggingId, setDraggingId] = useState<DraggablePanelId | null>(null);
   const [resizingId, setResizingId] = useState<DraggablePanelId | null>(null);
   const [focusedId, setFocusedId] = useState<DraggablePanelId | null>(null);
@@ -540,6 +559,39 @@ export function useDraggablePanels() {
   const resizeState = useRef<ResizeState | null>(null);
   const panelRefs = useRef(new Map<DraggablePanelId, HTMLElement>());
   const collapsedIdSet = useMemo(() => new Set(collapsedIds), [collapsedIds]);
+
+  const cancelActivePanelMotion = useCallback(() => {
+    const active = dragState.current;
+    if (active) {
+      if (active.frame !== null) {
+        window.cancelAnimationFrame(active.frame);
+      }
+      active.panel.style.willChange = "";
+      dragState.current = null;
+      setDraggingId(null);
+    }
+
+    const resizing = resizeState.current;
+    if (resizing) {
+      if (resizing.frame !== null) {
+        window.cancelAnimationFrame(resizing.frame);
+      }
+      resizing.panel.style.willChange = "";
+      resizeState.current = null;
+      setResizingId(null);
+    }
+  }, []);
+
+  const togglePanelLayoutLock = useCallback(() => {
+    setIsLayoutLocked((current) => {
+      const next = !current;
+      if (next) {
+        cancelActivePanelMotion();
+      }
+      saveLayoutLock(next);
+      return next;
+    });
+  }, [cancelActivePanelMotion]);
 
   const setPanelRef = useCallback((id: DraggablePanelId, panel: HTMLElement | null) => {
     if (panel) {
@@ -863,6 +915,7 @@ export function useDraggablePanels() {
       return {
         "data-testid": `aptos-panel-${id}`,
         "data-panel-id": id,
+        "data-panel-layout-locked": isLayoutLocked ? "true" : "false",
         "aria-expanded": !isCollapsed,
         ref: (panel: HTMLElement | null) => {
           setPanelRef(id, panel);
@@ -871,6 +924,7 @@ export function useDraggablePanels() {
           focusedId === id ? "is-focused" : "",
           draggingId === id ? "is-dragging" : "",
           resizingId === id ? "is-resizing" : "",
+          isLayoutLocked ? "is-layout-locked" : "",
           isCollapsed ? "is-collapsed" : ""
         ].filter(Boolean).join(" "),
         onPointerDownCapture: () => {
@@ -882,12 +936,16 @@ export function useDraggablePanels() {
         style: Object.keys(style).length ? style : undefined
       };
     },
-    [collapsedIdSet, draggingId, focusedId, layout, resizingId, setPanelRef]
+    [collapsedIdSet, draggingId, focusedId, isLayoutLocked, layout, resizingId, setPanelRef]
   );
 
   const beginDrag = useCallback(
     (id: DraggablePanelId, pointerId: number | null, clientX: number, clientY: number, panel: HTMLElement) => {
       if (!isPanelId(id)) {
+        return;
+      }
+
+      if (isLayoutLocked) {
         return;
       }
 
@@ -914,7 +972,7 @@ export function useDraggablePanels() {
       setFocusedId(id);
       setDraggingId(id);
     },
-    [layout]
+    [isLayoutLocked, layout]
   );
 
   const beginResize = useCallback(
@@ -927,6 +985,10 @@ export function useDraggablePanels() {
       panel: HTMLElement
     ) => {
       if (!isPanelId(id)) {
+        return;
+      }
+
+      if (isLayoutLocked) {
         return;
       }
 
@@ -960,38 +1022,52 @@ export function useDraggablePanels() {
       setFocusedId(id);
       setResizingId(id);
     },
-    [layout]
+    [isLayoutLocked, layout]
   );
 
   const getHandleProps = useCallback(
     (id: DraggablePanelId, label: string) => ({
       type: "button" as const,
-      className: "aptos-drag-handle glitch-hover",
+      className: `aptos-drag-handle glitch-hover${isLayoutLocked ? " is-layout-locked" : ""}`,
       "data-panel-drag-surface": id,
       "aria-label": `Drag ${label}`,
+      "aria-disabled": isLayoutLocked,
       onPointerDown: (event: PointerEvent<HTMLButtonElement>) => {
+        if (isLayoutLocked) {
+          return;
+        }
         event.currentTarget.setPointerCapture?.(event.pointerId);
         beginDrag(id, event.pointerId, event.clientX, event.clientY, getPanelFromHandle(event.currentTarget));
       },
       onMouseDown: (event: MouseEvent<HTMLButtonElement>) => {
+        if (isLayoutLocked) {
+          return;
+        }
         beginDrag(id, null, event.clientX, event.clientY, getPanelFromHandle(event.currentTarget));
       }
     }),
-    [beginDrag]
+    [beginDrag, isLayoutLocked]
   );
 
   const getDragSurfaceProps = useCallback(
     (id: DraggablePanelId, label: string) => ({
-      className: "aptos-drag-handle glitch-hover",
+      className: `aptos-drag-handle glitch-hover${isLayoutLocked ? " is-layout-locked" : ""}`,
       "data-panel-drag-surface": id,
       role: "button" as const,
       tabIndex: 0,
       "aria-label": `Drag ${label}`,
+      "aria-disabled": isLayoutLocked,
       onPointerDown: (event: PointerEvent<HTMLElement>) => {
+        if (isLayoutLocked) {
+          return;
+        }
         event.currentTarget.setPointerCapture?.(event.pointerId);
         beginDrag(id, event.pointerId, event.clientX, event.clientY, getPanelFromHandle(event.currentTarget));
       },
       onMouseDown: (event: MouseEvent<HTMLElement>) => {
+        if (isLayoutLocked) {
+          return;
+        }
         beginDrag(id, null, event.clientX, event.clientY, getPanelFromHandle(event.currentTarget));
       },
       onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
@@ -1000,7 +1076,7 @@ export function useDraggablePanels() {
         }
       }
     }),
-    [beginDrag]
+    [beginDrag, isLayoutLocked]
   );
 
   const getResizeHandleProps = useCallback(
@@ -1008,19 +1084,27 @@ export function useDraggablePanels() {
       type: "button" as const,
       className: `dot-test-resize-handle dot-test-resize-${handle}`,
       "aria-label": `Resize ${label} ${handle === "corner" ? "width and height" : handle}`,
+      disabled: isLayoutLocked,
+      "data-panel-layout-locked": isLayoutLocked ? "true" : "false",
       onPointerDown: (event: PointerEvent<HTMLButtonElement>) => {
         event.preventDefault();
         event.stopPropagation();
+        if (isLayoutLocked) {
+          return;
+        }
         event.currentTarget.setPointerCapture?.(event.pointerId);
         beginResize(id, handle, event.pointerId, event.clientX, event.clientY, getPanelFromHandle(event.currentTarget));
       },
       onMouseDown: (event: MouseEvent<HTMLButtonElement>) => {
         event.preventDefault();
         event.stopPropagation();
+        if (isLayoutLocked) {
+          return;
+        }
         beginResize(id, handle, null, event.clientX, event.clientY, getPanelFromHandle(event.currentTarget));
       }
     }),
-    [beginResize]
+    [beginResize, isLayoutLocked]
   );
 
   const isPanelCollapsed = useCallback((id: DraggablePanelId) => collapsedIdSet.has(id), [collapsedIdSet]);
@@ -1036,7 +1120,7 @@ export function useDraggablePanels() {
         return;
       }
 
-      const resizeHit = findPanelResizeHit(panelRefs.current, event.clientX, event.clientY, event.target);
+      const resizeHit = isLayoutLocked ? null : findPanelResizeHit(panelRefs.current, event.clientX, event.clientY, event.target);
 
       if (resizeHit) {
         event.preventDefault();
@@ -1062,7 +1146,14 @@ export function useDraggablePanels() {
       ).find((button) => containsPoint(button.getBoundingClientRect(), event.clientX, event.clientY));
 
       if (collapseButton) {
+        if (isLayoutLocked) {
+          return;
+        }
         togglePanelCollapsed(hit.id);
+        return;
+      }
+
+      if (isLayoutLocked) {
         return;
       }
 
@@ -1080,7 +1171,7 @@ export function useDraggablePanels() {
     return () => {
       document.removeEventListener("pointerdown", handlePanelChromePointerDown, true);
     };
-  }, [beginDrag, beginResize, togglePanelCollapsed]);
+  }, [beginDrag, beginResize, isLayoutLocked, togglePanelCollapsed]);
 
   const resetPanelLayout = useCallback(() => {
     const active = dragState.current;
@@ -1108,6 +1199,7 @@ export function useDraggablePanels() {
   return useMemo(
     () => ({
       layout,
+      isLayoutLocked,
       draggingId,
       resizingId,
       focusedId,
@@ -1118,6 +1210,7 @@ export function useDraggablePanels() {
       getResizeHandleProps,
       isPanelCollapsed,
       togglePanelCollapsed,
+      togglePanelLayoutLock,
       resetPanelLayout
     }),
     [
@@ -1128,10 +1221,12 @@ export function useDraggablePanels() {
       getHandleProps,
       getPanelProps,
       getResizeHandleProps,
+      isLayoutLocked,
       isPanelCollapsed,
       layout,
       resetPanelLayout,
       resizingId,
+      togglePanelLayoutLock,
       togglePanelCollapsed
     ]
   );

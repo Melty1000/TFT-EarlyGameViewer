@@ -41,4 +41,22 @@ describe("LevellingGuideContent", () => {
     expect(screen.getByText(conditionalLine)).toBeInTheDocument();
     expect(screen.queryByText(/go \./i)).not.toBeInTheDocument();
   });
+
+  test("renders provider minimum gold as a route pill", () => {
+    render(
+      <LevellingGuideContent
+        section={{
+          title: "Levelling guide",
+          lines: [
+            "Level 5 at 2-5 with 10+ gold",
+            "Level 6 at 3-2 with 30+ gold - stabilize board"
+          ]
+        }}
+      />
+    );
+
+    expect(screen.getByText("L6")).toBeInTheDocument();
+    expect(screen.getByText("30+ gold")).toBeInTheDocument();
+    expect(screen.getByText("stabilize board")).toBeInTheDocument();
+  });
 });

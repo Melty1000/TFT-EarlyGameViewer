@@ -18,8 +18,8 @@ describe("panel registry", () => {
       title: "04 / Build Browser"
     });
     expect(PANEL_REGISTRY.selectedComponents).toMatchObject({
-      label: "components",
-      title: "06 / Components"
+      label: "items",
+      title: "06 / Items"
     });
     expect(PANEL_REGISTRY.selectedGuide).toMatchObject({
       label: "levelling guide",
@@ -53,5 +53,6 @@ describe("panel registry", () => {
       "inspector"
     ]);
     expect(PANEL_DEBUG_OPTIONS.find((option) => option.id === "selectedAugments")?.label).toBe("Recommended Augments");
+    expect(PANEL_DEBUG_OPTIONS.find((option) => option.id === "selectedComponents")?.label).toBe("Items");
   });
 });

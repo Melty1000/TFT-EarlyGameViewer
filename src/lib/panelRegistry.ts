@@ -170,10 +170,10 @@ export const PANEL_REGISTRY: Record<DraggablePanelId, PanelRegistryEntry> = {
   },
   selectedComponents: {
     id: "selectedComponents",
-    label: "components",
-    title: "06 / Components",
+    label: "items",
+    title: "06 / Items",
     resizeAnchors: topLeftAnchors,
-    debugLabel: "Components",
+    debugLabel: "Items",
     debugLayout: {
       width: 300,
       height: 190,

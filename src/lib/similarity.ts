@@ -1,5 +1,6 @@
 import type { Comp, Dataset } from "../../shared/tft";
-import type { PhaseKey } from "../../shared/normalization";
+import { normalizeChampionLookup, type PhaseKey } from "../../shared/normalization";
+import { getNativeBoardPhases, hasNativeBoardPhase } from "../../shared/phaseAvailability";
 
 export type SimilaritySelection = {
   championIds: string[];
@@ -97,15 +98,21 @@ function normalizePhaseFocus(phaseFocus: SimilarityPhaseFocus): PhaseKey[] {
 }
 
 function getBoardChampionIds(comp: Comp, phaseFocus: SimilarityPhaseFocus) {
-  return normalizePhaseFocus(phaseFocus).flatMap((phase) =>
-    comp.phases[phase].boardSlots
+  return normalizePhaseFocus(phaseFocus).flatMap((phase) => {
+    if (!hasNativeBoardPhase(comp, phase)) {
+      return [];
+    }
+
+    return comp.phases[phase].boardSlots
       .map((slot) => slot.championId)
-      .filter((championId): championId is string => Boolean(championId))
-  );
+      .filter((championId): championId is string => Boolean(championId));
+  });
 }
 
 function getAllBoardItemIds(comp: Comp) {
-  return PHASE_KEYS.flatMap((phase) => comp.phases[phase].boardSlots.flatMap((slot) => slot.itemIds ?? []));
+  const nativePhases = getNativeBoardPhases(comp);
+  const phases = nativePhases.length ? nativePhases : PHASE_KEYS;
+  return phases.flatMap((phase) => comp.phases[phase].boardSlots.flatMap((slot) => slot.itemIds ?? []));
 }
 
 function getComponentDemandCounts(comp: Comp) {
@@ -121,8 +128,10 @@ export function scoreCompSimilarity(
   selection: SimilaritySelection,
   phase: SimilarityPhaseFocus
 ): SimilarityResult {
+  const selectedChampionIds = selection.championIds.map((championId) => normalizeChampionLookup(championId));
+  const boardChampionIds = getBoardChampionIds(comp, phase).map((championId) => normalizeChampionLookup(championId));
   const breakdown = {
-    champions: bucketScore(selection.championIds, getBoardChampionIds(comp, phase), SIMILARITY_WEIGHTS.champions),
+    champions: bucketScore(selectedChampionIds, boardChampionIds, SIMILARITY_WEIGHTS.champions),
     augments: bucketScore(selection.augmentIds, comp.recommendedAugmentIds, SIMILARITY_WEIGHTS.augments),
     items: bucketScore(selection.itemIds, getAllBoardItemIds(comp), SIMILARITY_WEIGHTS.items),
     components: countedBucketScore(

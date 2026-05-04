@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { PhaseKey } from "../../shared/normalization";
-import { COMPONENT_LABELS, PHASES } from "../../shared/normalization";
-import type { Comp, Dataset } from "../../shared/tft";
+import { PHASES } from "../../shared/normalization";
+import type { Comp, Dataset, GuideSection } from "../../shared/tft";
+import { getNativeBoardPhases, getPreferredBoardPhase } from "../../shared/phaseAvailability";
 import { CompListPane, getInitialCompListSelection } from "./CompListPane";
 import {
   buildInspectorModel,
@@ -23,13 +24,18 @@ import {
   getSourceAbbreviation,
   getSourceDisplayName
 } from "../lib/compMeta";
-import { compMatchesFilters, type PhaseFilter } from "../lib/filters";
+import { compMatchesFilters } from "../lib/filters";
 import {
-  getCompletedItemRecipeGroups,
+  getAssignedItemHolders,
   getDetailPanelGuideGroups,
   getLevellingGuideSection
 } from "../lib/detailPanelContent";
 import { rankCompsBySimilarity, type SimilaritySelection } from "../lib/similarity";
+import {
+  getSimilarityEntitySections,
+  type SimilarityEntityKind,
+  type SimilarityEntityOption
+} from "../lib/similarityOptions";
 import { PANEL_REGISTRY } from "../lib/panelRegistry";
 import { useDataset } from "../lib/useDataset";
 
@@ -62,30 +68,11 @@ const SIZE_LIFT = 1.5;
 const CLICK_FLASH_DURATION = 440;
 const CLICK_FLASH_RADIUS = 252;
 const DECODE_GLYPHS = "01[]{}<>/\\|+-=#%";
-const PHASE_FILTER_OPTIONS: PhaseFilter[] = ["all", ...PHASES];
 const EMPTY_SIMILARITY_SELECTION: SimilaritySelection = {
   championIds: [],
   augmentIds: [],
   itemIds: [],
   componentIds: []
-};
-const SIMILARITY_AUGMENT_TIER_ORDER: Record<string, number> = {
-  S: 0,
-  A: 1,
-  B: 2,
-  C: 3,
-  D: 4,
-  Unknown: 5
-};
-
-type SimilarityEntityKind = "champion" | "augment" | "item" | "component";
-
-type SimilarityEntityOption = {
-  kind: SimilarityEntityKind;
-  id: string;
-  name: string;
-  icon: string;
-  meta?: string;
 };
 
 function getDotPalette(themeMode: "dark" | "light"): DotPalette {
@@ -208,12 +195,12 @@ export function DotMatrixTestPage() {
   const draggablePanels = useDraggablePanels();
   const [selectedCompId, setSelectedCompId] = useState<string | null>(null);
   const [selectedBuildPhase, setSelectedBuildPhase] = useState<PhaseKey>("late");
+  const [selectedBoardPhase, setSelectedBoardPhase] = useState<PhaseKey>("late");
   const [inspector, setInspector] = useState<InspectorTarget>(null);
   const [lockedInspector, setLockedInspector] = useState<InspectorTarget>(null);
   const [chips, setChips] = useState<string[]>([]);
   const [liveQuery, setLiveQuery] = useState("");
   const [draftQuery, setDraftQuery] = useState("");
-  const [phaseFilter, setPhaseFilter] = useState<PhaseFilter>("all");
   const [hiddenSourceKeys, setHiddenSourceKeys] = useState<string[]>([]);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const [similaritySelection, setSimilaritySelection] = useState<SimilaritySelection>(EMPTY_SIMILARITY_SELECTION);
@@ -255,8 +242,8 @@ export function DotMatrixTestPage() {
       return [];
     }
 
-    return sourceFilteredComps.filter((comp) => compMatchesFilters(comp, data, phaseFilter, chips, liveQuery));
-  }, [chips, data, liveQuery, phaseFilter, sourceFilteredComps]);
+    return sourceFilteredComps.filter((comp) => compMatchesFilters(comp, data, "all", chips, liveQuery));
+  }, [chips, data, liveQuery, sourceFilteredComps]);
   const similaritySelectionCount = getSimilaritySelectionCount(similaritySelection);
   const similarityResults = useMemo(() => {
     if (!data || !similaritySelectionCount) {
@@ -294,6 +281,9 @@ export function DotMatrixTestPage() {
 
     return data.comps.find((comp) => comp.id === selectedCompId) ?? null;
   }, [data, selectedCompId]);
+  const selectedNativeBuildPhase = selectedComp
+    ? getPreferredBoardPhase(selectedComp, selectedBuildPhase)
+    : selectedBuildPhase;
 
   useEffect(() => {
     const selectedStillVisible = selectedCompId ? browserComps.some((comp) => comp.id === selectedCompId) : false;
@@ -312,8 +302,19 @@ export function DotMatrixTestPage() {
     setCopyState("idle");
   }, [browserComps, initialVisibleCompId, selectedCompId]);
 
+  useEffect(() => {
+    if (!selectedComp) {
+      return;
+    }
+
+    const nativeBoardPhase = getPreferredBoardPhase(selectedComp, selectedBoardPhase);
+    if (nativeBoardPhase !== selectedBoardPhase) {
+      setSelectedBoardPhase(nativeBoardPhase);
+    }
+  }, [selectedBoardPhase, selectedComp]);
+
   const activeInspector = selectedComp && data
-    ? buildInspectorModel(selectedComp, data, selectedBuildPhase, lockedInspector ?? inspector)
+    ? buildInspectorModel(selectedComp, data, selectedNativeBuildPhase, lockedInspector ?? inspector)
     : null;
   const browserPanel = PANEL_REGISTRY.browser;
 
@@ -345,7 +346,6 @@ export function DotMatrixTestPage() {
     setChips([]);
     setDraftQuery("");
     setLiveQuery("");
-    setPhaseFilter("all");
     setHiddenSourceKeys([]);
     setSimilaritySelection(EMPTY_SIMILARITY_SELECTION);
   };
@@ -667,7 +667,13 @@ export function DotMatrixTestPage() {
   const browserResizeHandles = getPanelResizeHandles(draggablePanels, "browser", browserPanel.label);
 
   return (
-    <main className={menuOpen ? "dot-test-shell is-menu-open" : "dot-test-shell"}>
+    <main
+      className={[
+        "dot-test-shell",
+        menuOpen ? "is-menu-open" : "",
+        draggablePanels.isLayoutLocked ? "is-panel-layout-locked" : ""
+      ].filter(Boolean).join(" ")}
+    >
       <canvas
         ref={canvasRef}
         className="dot-test-canvas"
@@ -732,10 +738,11 @@ export function DotMatrixTestPage() {
                   ? "loading"
                   : "offline"}
             </span>
-            <span className="dot-test-drag-label">[ Drag ]</span>
+            <span className="dot-test-drag-label">{draggablePanels.isLayoutLocked ? "[ Locked ]" : "[ Drag ]"}</span>
             <PanelCollapseButton
               collapsed={browserCollapsed}
               label={browserPanel.label}
+              disabled={draggablePanels.isLayoutLocked}
               onClick={() => draggablePanels.togglePanelCollapsed("browser")}
             />
           </div>
@@ -768,7 +775,7 @@ export function DotMatrixTestPage() {
                 <CompListPane
                   comps={browserComps}
                   dataset={data}
-                  phaseFilter={phaseFilter}
+                  phaseFilter="all"
                   onQuickFilter={addChip}
                   selectedCompId={selectedCompId}
                   onSelectComp={handleSelectComp}
@@ -790,14 +797,12 @@ export function DotMatrixTestPage() {
             chips={chips}
             liveQuery={liveQuery}
             draftQuery={draftQuery}
-            phaseFilter={phaseFilter}
             sourceOptions={sourceOptions}
             hiddenSourceKeys={hiddenSourceKeys}
             onLiveQueryChange={setLiveQuery}
             onDraftQueryChange={setDraftQuery}
             onCommitDraftChip={commitDraftChip}
             onRemoveChip={removeChip}
-            onPhaseFilterChange={setPhaseFilter}
             onToggleSourceVisibility={toggleSourceVisibility}
             onReset={resetBuildControls}
           />
@@ -806,7 +811,7 @@ export function DotMatrixTestPage() {
         <DotTestDraggablePanel id="selectedOverview" draggablePanels={draggablePanels}>
           <OverviewPanel
             selectedComp={selectedComp}
-            selectedBuildPhase={selectedBuildPhase}
+            selectedBuildPhase={selectedNativeBuildPhase}
             copyState={copyState}
             onCopyTeamCode={copySelectedTeamCode}
           />
@@ -816,7 +821,8 @@ export function DotMatrixTestPage() {
           <BoardViewPanel
             selectedComp={selectedComp}
             dataset={data}
-            selectedBuildPhase={selectedBuildPhase}
+            selectedBoardPhase={selectedBoardPhase}
+            onSelectedBoardPhaseChange={setSelectedBoardPhase}
             onHoverChampion={(id) => setLiveInspector(id ? { kind: "champion", id } : null)}
             onHoverItem={(id) => setLiveInspector(id ? { kind: "item", id } : null)}
             onToggleLock={toggleInspectorLock}
@@ -828,7 +834,7 @@ export function DotMatrixTestPage() {
           <SynergiesPanel
             selectedComp={selectedComp}
             dataset={data}
-            selectedBuildPhase={selectedBuildPhase}
+            selectedBuildPhase={selectedNativeBuildPhase}
             onHoverSynergy={(id) => setLiveInspector(id ? { kind: "synergy", id } : null)}
             onToggleLock={toggleInspectorLock}
             onQuickFilter={addChip}
@@ -849,14 +855,15 @@ export function DotMatrixTestPage() {
         </DotTestDraggablePanel>
 
         <DotTestDraggablePanel id="selectedGamePlan" draggablePanels={draggablePanels}>
-          <GamePlanPanel selectedComp={selectedComp} selectedBuildPhase={selectedBuildPhase} />
+          <GamePlanPanel selectedComp={selectedComp} selectedBuildPhase={selectedNativeBuildPhase} />
         </DotTestDraggablePanel>
 
         <DotTestDraggablePanel id="selectedComponents" draggablePanels={draggablePanels}>
           <ComponentsPanel
             selectedComp={selectedComp}
             dataset={data}
-            selectedBuildPhase={selectedBuildPhase}
+            selectedBuildPhase={selectedNativeBuildPhase}
+            onHoverChampion={(id) => setLiveInspector(id ? { kind: "champion", id } : null)}
             onHoverItem={(id) => setLiveInspector(id ? { kind: "item", id } : null)}
             onToggleLock={toggleInspectorLock}
             onQuickFilter={addChip}
@@ -873,7 +880,7 @@ export function DotMatrixTestPage() {
         </DotTestDraggablePanel>
 
         <DotTestDraggablePanel id="selectedGuide" draggablePanels={draggablePanels}>
-          <LevellingGuidePanel selectedComp={selectedComp} selectedBuildPhase={selectedBuildPhase} />
+          <LevellingGuidePanel selectedComp={selectedComp} selectedBuildPhase={selectedNativeBuildPhase} />
         </DotTestDraggablePanel>
 
         <DotTestDraggablePanel id="inspector" draggablePanels={draggablePanels}>
@@ -906,6 +913,22 @@ export function DotMatrixTestPage() {
           <button
             type="button"
             className="aptos-menu-link glitch-hover"
+            aria-label={draggablePanels.isLayoutLocked ? "Unlock panels" : "Lock panels"}
+            aria-pressed={draggablePanels.isLayoutLocked}
+            onClick={() => {
+              draggablePanels.togglePanelLayoutLock();
+              window.dispatchEvent(new Event("pointerleave"));
+              setMenuOpen(false);
+            }}
+          >
+            <DecodingMenuText
+              label={draggablePanels.isLayoutLocked ? "[ Unlock Panels ]" : "[ Lock Panels ]"}
+              delay={160}
+            />
+          </button>
+          <button
+            type="button"
+            className="aptos-menu-link glitch-hover"
             aria-label="Reset layout"
             onClick={() => {
               draggablePanels.resetPanelLayout();
@@ -913,7 +936,7 @@ export function DotMatrixTestPage() {
               setMenuOpen(false);
             }}
           >
-            <DecodingMenuText label="[ Reset Layout ]" delay={160} />
+            <DecodingMenuText label="[ Reset Layout ]" delay={240} />
           </button>
         </div>
       ) : null}
@@ -980,10 +1003,11 @@ function DotTestDraggablePanel({ id, label, title, draggablePanels, children }: 
     >
       <div {...dragHandle} className={`${dragHandle.className} aptos-panel-header dot-test-detail-drag-bar`}>
         <span>{panelTitle}</span>
-        <span className="dot-test-drag-label">[ Drag ]</span>
+        <span className="dot-test-drag-label">{draggablePanels.isLayoutLocked ? "[ Locked ]" : "[ Drag ]"}</span>
         <PanelCollapseButton
           collapsed={collapsed}
           label={panelLabel}
+          disabled={draggablePanels.isLayoutLocked}
           onClick={() => draggablePanels.togglePanelCollapsed(id)}
         />
       </div>
@@ -998,10 +1022,12 @@ function DotTestDraggablePanel({ id, label, title, draggablePanels, children }: 
 function PanelCollapseButton({
   collapsed,
   label,
+  disabled = false,
   onClick
 }: {
   collapsed: boolean;
   label: string;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   const action = collapsed ? "Expand" : "Collapse";
@@ -1012,6 +1038,7 @@ function PanelCollapseButton({
       className="dot-test-panel-collapse-button glitch-hover"
       aria-label={`${action} ${label} panel`}
       aria-expanded={!collapsed}
+      disabled={disabled}
       onPointerDown={(event) => {
         event.stopPropagation();
       }}
@@ -1061,16 +1088,22 @@ type SourceOption = {
 
 function BuildBrowserPhaseSelector({
   selectedBuildPhase,
-  onSelectedBuildPhaseChange
+  onSelectedBuildPhaseChange,
+  label = "Build Phase",
+  availablePhases = PHASES
 }: {
   selectedBuildPhase: PhaseKey;
   onSelectedBuildPhaseChange: (value: PhaseKey) => void;
+  label?: string;
+  availablePhases?: readonly PhaseKey[];
 }) {
+  const phaseOptions = availablePhases.length ? availablePhases : PHASES;
+
   return (
-    <div className="dot-test-browser-phase-control" role="group" aria-label="Build phase">
-      <span>Build Phase</span>
+    <div className="dot-test-browser-phase-control" role="group" aria-label={label}>
+      <span>{label}</span>
       <div className="dot-test-browser-phase-buttons">
-        {PHASES.map((phase) => (
+        {phaseOptions.map((phase) => (
           <button
             key={phase}
             type="button"
@@ -1091,14 +1124,12 @@ type BuildControlsPanelProps = {
   chips: string[];
   liveQuery: string;
   draftQuery: string;
-  phaseFilter: PhaseFilter;
   sourceOptions: SourceOption[];
   hiddenSourceKeys: string[];
   onLiveQueryChange: (value: string) => void;
   onDraftQueryChange: (value: string) => void;
   onCommitDraftChip: () => void;
   onRemoveChip: (value: string) => void;
-  onPhaseFilterChange: (value: PhaseFilter) => void;
   onToggleSourceVisibility: (sourceKey: string) => void;
   onReset: () => void;
 };
@@ -1109,14 +1140,12 @@ function BuildControlsPanel({
   chips,
   liveQuery,
   draftQuery,
-  phaseFilter,
   sourceOptions,
   hiddenSourceKeys,
   onLiveQueryChange,
   onDraftQueryChange,
   onCommitDraftChip,
   onRemoveChip,
-  onPhaseFilterChange,
   onToggleSourceVisibility,
   onReset
 }: BuildControlsPanelProps) {
@@ -1163,22 +1192,6 @@ function BuildControlsPanel({
         ) : (
           <span className="dot-test-muted-line">[ no filters ]</span>
         )}
-      </div>
-
-      <div className="dot-test-control-block">
-        <span className="dot-test-control-label">List Phase</span>
-        <div className="dot-test-segment-row">
-          {PHASE_FILTER_OPTIONS.map((phase) => (
-            <button
-              key={phase}
-              type="button"
-              className={phase === phaseFilter ? "dot-test-segment active" : "dot-test-segment"}
-              onClick={() => onPhaseFilterChange(phase)}
-            >
-              {phase}
-            </button>
-          ))}
-        </div>
       </div>
 
       <div className="dot-test-source-stack" role="group" aria-label="Source visibility">
@@ -1346,7 +1359,8 @@ function OverviewPanel({
 function BoardViewPanel({
   selectedComp,
   dataset,
-  selectedBuildPhase,
+  selectedBoardPhase,
+  onSelectedBoardPhaseChange,
   onHoverChampion,
   onHoverItem,
   onToggleLock,
@@ -1354,7 +1368,8 @@ function BoardViewPanel({
 }: {
   selectedComp: Comp | null;
   dataset: Dataset | null;
-  selectedBuildPhase: PhaseKey;
+  selectedBoardPhase: PhaseKey;
+  onSelectedBoardPhaseChange: (value: PhaseKey) => void;
   onHoverChampion: (id: string | null) => void;
   onHoverItem: (id: string | null) => void;
   onToggleLock: (target: InspectorTarget) => void;
@@ -1371,16 +1386,22 @@ function BoardViewPanel({
 
     const updateHexSize = () => {
       const rect = panel.getBoundingClientRect();
-      const availableWidth = Math.max(0, rect.width - 14);
-      const availableHeight = Math.max(0, rect.height - 38);
+      const toolbar = panel.querySelector<HTMLElement>(".dot-test-board-toolbar");
+      const toolbarHeight = toolbar?.getBoundingClientRect().height ?? 28;
+      const availableWidth = Math.max(0, rect.width - 24);
+      const availableHeight = Math.max(0, rect.height - toolbarHeight - 10);
       const widthBound = availableWidth / 8.05;
       const heightBound = availableHeight / 3.42;
-      setHexSize(Math.round(clamp(Math.min(widthBound / 0.8660254, heightBound), 24, 72)));
+      setHexSize(Math.round(Math.max(Math.min(widthBound / 0.8660254, heightBound), 24)));
     };
 
     updateHexSize();
     const observer = new ResizeObserver(updateHexSize);
     observer.observe(panel);
+    const toolbar = panel.querySelector(".dot-test-board-toolbar");
+    if (toolbar) {
+      observer.observe(toolbar);
+    }
 
     return () => observer.disconnect();
   }, [dataset, selectedComp]);
@@ -1389,7 +1410,13 @@ function BoardViewPanel({
     return <EmptyPanelState />;
   }
 
-  const phase = selectedComp.phases[selectedBuildPhase];
+  const availableBoardPhases = getNativeBoardPhases(selectedComp);
+  if (!availableBoardPhases.length) {
+    return <EmptyPanelState label="No board data" />;
+  }
+
+  const activeBoardPhase = getPreferredBoardPhase(selectedComp, selectedBoardPhase);
+  const phase = selectedComp.phases[activeBoardPhase];
   const filledBoardSlotCount = phase.boardSlots.filter((slot) => slot.championId).length;
   const boardCells = phase.boardSlots.map((slot, slotIndex) => {
     const row = Math.floor(slotIndex / 7);
@@ -1415,20 +1442,27 @@ function BoardViewPanel({
       className="dot-test-board-panel"
       style={{ "--opnr-board-hex-height": `${hexSize}px` } as CSSProperties}
     >
-      <div className="dot-test-board-meta">
-        <span>{selectedBuildPhase} board</span>
-        <strong>{filledBoardSlotCount} units</strong>
+      <div className="dot-test-board-toolbar">
+        <div className="dot-test-board-meta">
+          <span className="dot-test-board-phase">{activeBoardPhase} board</span>
+          <strong>{filledBoardSlotCount} units</strong>
+        </div>
+        <BuildBrowserPhaseSelector
+          label="Board Phase"
+          selectedBuildPhase={activeBoardPhase}
+          onSelectedBuildPhaseChange={onSelectedBoardPhaseChange}
+          availablePhases={availableBoardPhases}
+        />
       </div>
       <div className="board-stage dot-test-board-stage">
         <div className="board-grid">
-          {boardCells.map(({ slot, row, column, style }) => {
+          {boardCells.map(({ slot, style }) => {
             const champion = slot.championId ? dataset.championsById[slot.championId] : undefined;
             const starLevel = champion ? slot.starLevel ?? phase.championLevels?.[champion.id] ?? 1 : 1;
             return (
               <div
                 key={slot.index}
                 className={champion ? "board-cell has-unit" : "board-cell"}
-                data-board-coord={`R${row + 1}:C${column + 1}`}
                 data-board-slot={slot.index}
                 style={style}
               >
@@ -1551,13 +1585,34 @@ function RecommendedAugmentsPanel({
   );
 }
 
+function getGamePlanSignal(line: string) {
+  const match = line.match(/^([A-Za-z][A-Za-z0-9 +./-]{1,24}):\s*(.+)$/);
+
+  if (!match) {
+    return { signal: null, body: line };
+  }
+
+  return { signal: match[1], body: match[2] };
+}
+
+function getGamePlanActions(gamePlan: GuideSection[]) {
+  return gamePlan.flatMap((section) =>
+    section.lines.map((line) => ({
+      sectionTitle: section.title,
+      line,
+      ...getGamePlanSignal(line)
+    }))
+  );
+}
+
 function GamePlanPanel({ selectedComp, selectedBuildPhase }: { selectedComp: Comp | null; selectedBuildPhase: PhaseKey }) {
   if (!selectedComp) {
     return <EmptyPanelState />;
   }
 
   const { gamePlan } = getDetailPanelGuideGroups(selectedComp, selectedBuildPhase);
-  const noteCount = gamePlan.reduce((count, section) => count + section.lines.length, 0);
+  const actions = getGamePlanActions(gamePlan);
+  const noteCount = actions.length;
 
   if (!noteCount) {
     return <EmptyPanelState label="No game plan notes" />;
@@ -1567,20 +1622,22 @@ function GamePlanPanel({ selectedComp, selectedBuildPhase }: { selectedComp: Com
     <div className="dot-test-game-plan-panel">
       <div className="dot-test-board-meta dot-test-game-plan-meta">
         <span>{selectedBuildPhase} plan</span>
-        <strong>{noteCount} notes</strong>
+        <strong>{noteCount} actions</strong>
       </div>
-      <div className="dot-test-guide-section-list">
-        {gamePlan.map((section) => (
-          <section key={`${selectedBuildPhase}-${section.title}`} className="dot-test-guide-section">
-            <h3>{section.title}</h3>
-            <div className="dot-test-guide-lines">
-              {section.lines.map((line, index) => (
-                <p key={`${section.title}-${index}-${line}`}>{line}</p>
-              ))}
+      <ol className="dot-test-game-plan-action-list" aria-label={`${selectedBuildPhase} game plan actions`}>
+        {actions.map((action, index) => (
+          <li key={`${selectedBuildPhase}-${action.sectionTitle}-${index}-${action.line}`} className="dot-test-game-plan-action">
+            <span className="dot-test-game-plan-action-index">{String(index + 1).padStart(2, "0")}</span>
+            <div className="dot-test-game-plan-action-body">
+              <div className="dot-test-game-plan-action-meta">
+                <span>{action.sectionTitle}</span>
+                {action.signal ? <strong>{action.signal}</strong> : null}
+              </div>
+              <p>{action.body}</p>
             </div>
-          </section>
+          </li>
         ))}
-      </div>
+      </ol>
     </div>
   );
 }
@@ -1589,6 +1646,7 @@ function ComponentsPanel({
   selectedComp,
   dataset,
   selectedBuildPhase,
+  onHoverChampion,
   onHoverItem,
   onToggleLock,
   onQuickFilter
@@ -1596,6 +1654,7 @@ function ComponentsPanel({
   selectedComp: Comp | null;
   dataset: Dataset | null;
   selectedBuildPhase: PhaseKey;
+  onHoverChampion: (id: string | null) => void;
   onHoverItem: (id: string | null) => void;
   onToggleLock: (target: InspectorTarget) => void;
   onQuickFilter: (label: string) => void;
@@ -1604,9 +1663,10 @@ function ComponentsPanel({
     return <EmptyPanelState />;
   }
 
-  const completedItems = getCompletedItemRecipeGroups(selectedComp, dataset, selectedBuildPhase);
+  const itemHolders = getAssignedItemHolders(selectedComp, dataset, selectedBuildPhase);
+  const assignedItemCount = itemHolders.reduce((count, holder) => count + holder.items.length, 0);
 
-  if (!selectedComp.componentDemand.length && !completedItems.length) {
+  if (!selectedComp.componentDemand.length && !itemHolders.length) {
     return <EmptyPanelState label="No item data" />;
   }
 
@@ -1614,49 +1674,94 @@ function ComponentsPanel({
     <div className="dot-test-components-panel">
       <div className="dot-test-board-meta dot-test-components-meta">
         <span>{selectedBuildPhase} item read</span>
-        <strong>
-          {selectedComp.componentDemand.length} comps / {completedItems.length} items
+        <strong
+          className="dot-test-components-counts"
+          aria-label={`${itemHolders.length} holders, ${assignedItemCount} assigned items`}
+        >
+          <span title={`${itemHolders.length} item holders`}>{itemHolders.length} H</span>
+          <span title={`${assignedItemCount} assigned items`}>{assignedItemCount} I</span>
         </strong>
       </div>
 
       <div className="dot-test-item-section-list">
-        {completedItems.length ? (
-          <section className="dot-test-item-section dot-test-completed-item-section">
-            <h3>Completed items</h3>
-            <div className="dot-test-completed-item-grid">
-              {completedItems.map(({ item, count, recipe }) => {
-                const recipeLabel = recipe.length ? ` Recipe: ${recipe.map((component) => component.name).join(" + ")}` : "";
+        {itemHolders.length ? (
+          <section className="dot-test-item-section dot-test-item-holder-section">
+            <h3>Item holders</h3>
+            <div className="dot-test-item-holder-list">
+              {itemHolders.map(({ champion, slotIndex, starLevel, items }) => {
+                const stars = Math.max(1, Math.min(3, Math.round(starLevel || 1)));
                 return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="dot-test-completed-item-card"
-                    title={`${item.name} - click to pin, right-click to filter.${recipeLabel}`}
-                    onMouseEnter={() => onHoverItem(item.id)}
-                    onMouseLeave={() => onHoverItem(null)}
-                    onClick={() => onToggleLock({ kind: "item", id: item.id })}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      onQuickFilter(item.name);
-                    }}
+                  <div
+                    key={`${champion.id}-${slotIndex}`}
+                    className={`dot-test-item-holder-row cost-${champion.cost}`}
+                    data-holder-slot={slotIndex}
+                    role="group"
+                    aria-label={`${champion.name} assigned items`}
                   >
-                    <span className="dot-test-item-token-main">
-                      <img src={item.icon} alt={item.name} />
-                      <span>{item.name}</span>
-                      <strong>{count}</strong>
-                    </span>
-                    {recipe.length ? (
-                      <span className="dot-test-item-recipe-row" aria-label={`${item.name} recipe`}>
-                        {recipe.map((component, index) => (
-                          <span key={`${component.id}-${index}`} className="dot-test-recipe-chip">
-                            <img src={component.icon} alt="" aria-hidden="true" />
-                            <span>{component.name}</span>
-                          </span>
-                        ))}
-                      </span>
-                    ) : null}
-                  </button>
+                    <button
+                      type="button"
+                      className="dot-test-item-holder-champion"
+                      aria-label={`Inspect champion ${champion.name}`}
+                      title={`${champion.name} - click to pin, right-click to filter`}
+                      onMouseEnter={() => onHoverChampion(champion.id)}
+                      onMouseLeave={() => onHoverChampion(null)}
+                      onClick={() => onToggleLock({ kind: "champion", id: champion.id })}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onQuickFilter(champion.name);
+                      }}
+                    >
+                      <img src={champion.icon} alt="" aria-hidden="true" />
+                      {stars > 1 ? (
+                        <span className={`dot-test-item-holder-stars stars-${stars}`} title={`${stars}-star target`}>
+                          {Array.from({ length: stars }, (_, index) => (
+                            <span key={index} aria-hidden="true">
+                              ★
+                            </span>
+                          ))}
+                          <span className="sr-only">{stars}-star</span>
+                        </span>
+                      ) : null}
+                    </button>
+                    <div className="dot-test-item-holder-tray" aria-label={`${champion.name} items`}>
+                      {items.map(({ item, recipe, index }) => {
+                        const recipeNames = recipe.map((component) => component.name);
+                        const recipeLabel = recipeNames.length ? ` Recipe: ${recipeNames.join(" + ")}` : "";
+                        return (
+                          <button
+                            key={`${item.id}-${index}`}
+                            type="button"
+                            className={recipe.length ? "dot-test-holder-item-button has-recipe" : "dot-test-holder-item-button"}
+                            aria-label={`Inspect ${item.name} on ${champion.name}.${recipeLabel}`}
+                            title={`${champion.name}: ${item.name} - click to pin, right-click to filter.${recipeLabel}`}
+                            onMouseEnter={() => onHoverItem(item.id)}
+                            onMouseLeave={() => onHoverItem(null)}
+                            onClick={() => onToggleLock({ kind: "item", id: item.id })}
+                            onContextMenu={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              onQuickFilter(item.name);
+                            }}
+                          >
+                            <img className="dot-test-holder-item-main-icon" src={item.icon} alt="" aria-hidden="true" />
+                            {recipe.length ? (
+                              <span className="dot-test-holder-item-recipe" aria-hidden="true">
+                                {recipe.map((component, recipeIndex) => (
+                                  <img
+                                    key={`${component.id}-${recipeIndex}`}
+                                    src={component.icon}
+                                    alt=""
+                                    title={component.name}
+                                  />
+                                ))}
+                              </span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 );
               })}
             </div>
@@ -1723,53 +1828,6 @@ function removeOneSimilarityId(values: string[], id: string) {
   }
 
   return [...values.slice(0, index), ...values.slice(index + 1)];
-}
-
-function getSimilarityEntitySections(dataset: Dataset): { title: string; kind: SimilarityEntityKind; options: SimilarityEntityOption[] }[] {
-  const champions = Object.values(dataset.championsById)
-    .filter((champion) => champion.cost <= 5)
-    .sort((left, right) => left.cost - right.cost || left.name.localeCompare(right.name))
-    .map((champion) => ({
-      kind: "champion" as const,
-      id: champion.id,
-      name: champion.name,
-      icon: champion.icon,
-      meta: `${champion.cost}C`
-    }));
-  const augments = Object.values(dataset.augmentsById)
-    .sort((left, right) => {
-      const leftTier = SIMILARITY_AUGMENT_TIER_ORDER[left.tier] ?? SIMILARITY_AUGMENT_TIER_ORDER.Unknown;
-      const rightTier = SIMILARITY_AUGMENT_TIER_ORDER[right.tier] ?? SIMILARITY_AUGMENT_TIER_ORDER.Unknown;
-      return leftTier - rightTier || left.name.localeCompare(right.name);
-    })
-    .map((augment) => ({
-      kind: "augment" as const,
-      id: augment.id,
-      name: augment.name,
-      icon: augment.icon,
-      meta: augment.tier === "Unknown" ? undefined : augment.tier
-    }));
-  const items = Object.values(dataset.itemsById)
-    .sort((left, right) => left.name.localeCompare(right.name))
-    .map((item) => ({
-      kind: "item" as const,
-      id: item.id,
-      name: item.name,
-      icon: item.icon
-    }));
-  const components = Object.entries(COMPONENT_LABELS).map(([componentId, label]) => ({
-    kind: "component" as const,
-    id: componentId,
-    name: label,
-    icon: `${import.meta.env.BASE_URL}assets/items/${componentId}.png`
-  }));
-
-  return [
-    { title: "Champions", kind: "champion", options: champions },
-    { title: "Augments", kind: "augment", options: augments },
-    { title: "Items", kind: "item", options: items },
-    { title: "Components", kind: "component", options: components }
-  ];
 }
 
 function SimilaritiesPanel({

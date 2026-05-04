@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import generatedDataset from "../src/data/tft-set17.json";
+import { PHASES } from "../shared/normalization";
 import { datasetSchema } from "../shared/tft";
 import {
+  extractMobalyticsLevelingLines,
   parseTftAcademyDetailTier,
   parseTftAcademyTierMap,
   parseTftflowDetailHtml,
@@ -143,6 +145,31 @@ describe("dataset validation", () => {
     ).toBe(true);
   });
 
+  it("ships board phases only when backed by provider board evidence", () => {
+    const dataset = datasetSchema.parse(generatedDataset);
+
+    for (const comp of dataset.comps) {
+      const nativeBoardPhases = new Set(
+        comp.sources[0]?.evidence
+          .filter((entry) => entry.kind === "board" && entry.phase !== "overview")
+          .map((entry) => entry.phase) ?? []
+      );
+
+      for (const phaseKey of PHASES) {
+        if (nativeBoardPhases.has(phaseKey)) {
+          expect(comp.phases[phaseKey].championIds.length, `${comp.title} should keep native ${phaseKey} board`).toBeGreaterThan(0);
+          continue;
+        }
+
+        expect(comp.phases[phaseKey].championIds, `${comp.title} should not forge ${phaseKey} champion ids`).toEqual([]);
+        expect(
+          comp.phases[phaseKey].boardSlots.filter((slot) => slot.championId),
+          `${comp.title} should not forge ${phaseKey} board slots`
+        ).toEqual([]);
+      }
+    }
+  });
+
   it("rejects provider builds without native evidence", () => {
     const dataset = datasetSchema.parse(structuredClone(generatedDataset));
     dataset.comps[0].sources[0].evidence = [];
@@ -150,6 +177,30 @@ describe("dataset validation", () => {
     const problems = validateDataset(dataset);
 
     expect(problems.some((problem) => problem.includes("provider-native evidence"))).toBe(true);
+  });
+
+  it("rejects phase board data without matching provider board evidence", () => {
+    const dataset = datasetSchema.parse(structuredClone(generatedDataset));
+    const comp = dataset.comps.find((candidate) =>
+      candidate.sources[0]?.evidence.some((entry) => entry.kind === "board" && entry.phase === "late") &&
+      candidate.phases.late.championIds.length > 0
+    );
+
+    expect(comp).toBeDefined();
+    if (!comp) {
+      return;
+    }
+
+    comp.phases.early = structuredClone(comp.phases.late);
+    comp.sources[0].evidence = comp.sources[0].evidence.filter(
+      (entry) => !(entry.kind === "board" && entry.phase === "early")
+    );
+
+    const problems = validateDataset(dataset);
+
+    expect(
+      problems.some((problem) => problem.includes("early phase has board data without provider board evidence"))
+    ).toBe(true);
   });
 
   it("resolves Mobalytics legacy item slugs to current item names", () => {
@@ -166,6 +217,119 @@ describe("dataset validation", () => {
     expect(usedItemIds.has("steadfast-hammer")).toBe(false);
     expect(usedItemIds.has("protector-s-vow")).toBe(true);
     expect(usedItemIds.has("steadfast-heart")).toBe(true);
+  });
+
+  it("ships emblem recipe ids from provider item composition data", () => {
+    const dataset = datasetSchema.parse(generatedDataset);
+    const emblems = Object.values(dataset.itemsById).filter((item) => /emblem$/i.test(item.name));
+
+    expect(emblems.length).toBeGreaterThan(0);
+    expect(
+      emblems.map((item) => ({
+        id: item.id,
+        recipeIds: (item as { recipeIds?: string[] }).recipeIds ?? []
+      }))
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          recipeIds: expect.arrayContaining(["spatula"])
+        })
+      ])
+    );
+    expect(
+      emblems
+        .map((item) => ((item as { recipeIds?: string[] }).recipeIds ?? []).length)
+        .filter((length) => length > 0)
+        .every((length) => length === 2)
+    ).toBe(true);
+  });
+
+  it("ships every current set trait emblem, even when no scraped comp equips it", () => {
+    const dataset = datasetSchema.parse(generatedDataset);
+    const expectedTraitEmblemIds = [
+      "anima-emblem",
+      "arbiter-emblem",
+      "bastion-emblem",
+      "brawler-emblem",
+      "challenger-emblem",
+      "dark-star-emblem",
+      "marauder-emblem",
+      "meeple-emblem",
+      "n-o-v-a-emblem",
+      "primordian-emblem",
+      "psionic-emblem",
+      "rogue-emblem",
+      "shepherd-emblem",
+      "sniper-emblem",
+      "space-groove-emblem",
+      "stargazer-emblem",
+      "timebreaker-emblem",
+      "vanguard-emblem",
+      "voyager-emblem"
+    ];
+
+    expect(Object.keys(dataset.itemsById)).toEqual(expect.arrayContaining(expectedTraitEmblemIds));
+    expect(dataset.itemsById["random-emblem"]).toBeUndefined();
+  });
+
+  it("ships Mobalytics champion-level recommended item ids", () => {
+    const dataset = datasetSchema.parse(generatedDataset);
+    const championsWithRecommendedItems = Object.values(dataset.championsById).filter(
+      (champion) => ((champion as { recommendedItemIds?: string[] }).recommendedItemIds ?? []).length > 0
+    );
+
+    expect(championsWithRecommendedItems.length).toBeGreaterThan(30);
+    expect(championsWithRecommendedItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "aatrox",
+          recommendedItemIds: expect.arrayContaining([
+            "gargoyle-stoneplate",
+            "bloodthirster",
+            "bramble-vest",
+            "sunfire-cape",
+            "titan-s-resolve"
+          ])
+        })
+      ])
+    );
+    expect(dataset.championsById.aatrox.recommendedItemIds.length).toBeGreaterThanOrEqual(8);
+
+    for (const champion of championsWithRecommendedItems) {
+      for (const itemId of (champion as { recommendedItemIds?: string[] }).recommendedItemIds ?? []) {
+        expect(dataset.itemsById[itemId], `${champion.name} recommended item ${itemId}`).toBeDefined();
+      }
+    }
+  });
+
+  it("formats Mobalytics levelling tags with minimum gold", () => {
+    expect(
+      extractMobalyticsLevelingLines({
+        label: "Level 5 Slow Roll",
+        slug: "5-slow-roll",
+        levelling: [
+          { level: 4, stage: "2-1", preserveMoney: 10, description: "Hold pairs" },
+          { level: 5, stage: "3-2", preserveMoney: 50, description: "Slowroll for carries" }
+        ]
+      })
+    ).toEqual(["Level 4 at 2-1 with 10+ gold - Hold pairs", "Level 5 at 3-2 with 50+ gold - Slowroll for carries"]);
+  });
+
+  it("includes Mobalytics minimum gold in generated levelling guides", () => {
+    const dataset = datasetSchema.parse(generatedDataset);
+    const mobalyticsComp = dataset.comps.find((comp) => comp.sources[0]?.name === "mobalytics");
+    const levellingLines =
+      mobalyticsComp?.guide.overview.find((section) => /levell?ing guide/i.test(section.title))?.lines ?? [];
+
+    expect(mobalyticsComp).toBeDefined();
+    expect(levellingLines.some((line) => /\bwith\s+\d+\+?\s+gold\b/i.test(line))).toBe(true);
+  });
+
+  it("canonicalizes duplicate Meepsie champion records", () => {
+    const dataset = datasetSchema.parse(generatedDataset);
+    const meepsies = Object.values(dataset.championsById).filter((champion) => champion.name === "Meepsie");
+
+    expect(meepsies.map((champion) => champion.id)).toEqual(["meepsie"]);
   });
 
   it("does not ship missing item placeholder icons", () => {
