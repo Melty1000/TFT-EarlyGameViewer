@@ -10,17 +10,22 @@ const BUILD_DIR = path.join(ROOT, "build");
 const PUBLIC_DIR = path.join(ROOT, "public");
 
 const SIZES = [16, 24, 32, 48, 64, 128, 256];
+const ICON_SCALE = 1.24;
 
 await mkdir(BUILD_DIR, { recursive: true });
 await mkdir(PUBLIC_DIR, { recursive: true });
 
 const pngBuffers = await Promise.all(
-  SIZES.map((size) =>
-    sharp(SVG, { density: 24, limitInputPixels: false })
-      .resize(size, size, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+  SIZES.map((size) => {
+    const scaledSize = Math.ceil(size * ICON_SCALE);
+    const offset = Math.floor((scaledSize - size) / 2);
+
+    return sharp(SVG, { density: 24, limitInputPixels: false })
+      .resize(scaledSize, scaledSize, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .extract({ left: offset, top: offset, width: size, height: size })
       .png()
-      .toBuffer()
-  )
+      .toBuffer();
+  })
 );
 
 const ico = await pngToIco(pngBuffers);
