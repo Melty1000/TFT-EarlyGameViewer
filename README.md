@@ -1,13 +1,15 @@
 # opnr.gg
 
-Desktop-first TFT comp browser rebuilt with React, TypeScript, and Vite, backed by a normalized local dataset.
+Desktop-first TFT comp browser rebuilt with React, TypeScript, Vite, and a Rust/Tauri desktop shell, backed by a normalized local dataset.
 
 ## Commands
 
 - `npm install` - install the app, test, and pipeline dependencies
-- `npm run launch` - install missing dependencies if needed and launch the app on `127.0.0.1:3002`
+- `npm run launch` - install missing dependencies if needed and launch the Tauri desktop app
 - `npm run dev` - start the Vite app
+- `npm run tauri:dev` - start the Tauri desktop shell against Vite on `127.0.0.1:3002`
 - `npm run build` - typecheck and build the production bundle
+- `npm run release:build` - build the Tauri app, then copy the installer and portable executable into `release/`
 - `npm run test` - run unit and component tests
 - `npm run data:sync` - fetch and normalize Set 17 TFT inputs into `public/data/tft-set17.json`
 - `npm run data:validate` - validate the generated dataset without re-syncing it
@@ -30,7 +32,7 @@ git config melty.commitMachine "desktop"
 
 Environment variables can override those defaults for one commit: `AI_MODEL`, `CODEX_MODEL`, `AI_COMMIT_MACHINE`, or `CODEX_MACHINE`.
 
-## Portable Launch
+## Desktop Launch
 
 From any cloned copy of the repo:
 
@@ -38,19 +40,41 @@ From any cloned copy of the repo:
 npm run launch
 ```
 
-The launcher is repo-relative and does not depend on local absolute paths. It requires Node 20+, installs missing dependencies with `npm install`, then starts Vite with `--strictPort` on `127.0.0.1:3002`.
+The launcher is repo-relative and does not depend on local absolute paths. It requires Node 20+ and Rust 1.77.2+, installs missing npm dependencies when needed, then starts the Tauri desktop shell. Tauri starts Vite with `--strictPort` on `127.0.0.1:3002`.
 
-Override the target when needed:
+For browser-only frontend work, run Vite directly:
 
 ```powershell
-npm run launch -- --port 3003
-npm run launch -- --host 0.0.0.0 --port 3002
+npm run dev
+```
+
+## Windows Release
+
+Build both Windows release artifacts with:
+
+```powershell
+npm run release:build
+```
+
+The release script copies these generated Tauri outputs into `release/`:
+
+```text
+opnr-gg-<version>-x64-setup.exe
+opnr-gg-<version>-x64-portable.exe
+```
+
+Both artifacts use the same `opnr.gg` icon generated from `public/opnrgg.svg`.
+
+Launcher options:
+
+```powershell
 npm run launch -- --no-install
 ```
 
 ## Repo shape
 
 - `src/` - React app
+- `src-tauri/` - Rust/Tauri desktop shell, permissions, icons, and Windows bundler config
 - `shared/` - shared types, schemas, and normalization helpers
 - `scripts/` - TypeScript pipeline and dataset validation
 - `public/data/` - generated runtime dataset

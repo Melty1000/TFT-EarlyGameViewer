@@ -9,11 +9,13 @@ test-results/
 /legacy/
 /public/data/tft-set16.json
 
-# Electron-builder output is generated locally or uploaded as a GitHub Release asset.
+# Tauri release output is generated locally or uploaded as a GitHub Release asset.
 release/*
+/src-tauri/target/
+/src-tauri/gen/
 
-# Abandoned static-portable folder (superseded by Electron build)
-/TFT-EarlyGameViewer-portable/
+# Abandoned static-portable folder (superseded by desktop release builds)
+/opnr.gg-portable/
 
 # Local sync/probe logs
 /sync-out.txt

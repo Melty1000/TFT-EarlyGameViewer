@@ -2753,7 +2753,7 @@ p {
 }
 
 /* ===================================
-   OPNR TITLEBAR (Electron frameless)
+   OPNR TITLEBAR (Tauri frameless)
    =================================== */
 .titlebar {
   display: flex;

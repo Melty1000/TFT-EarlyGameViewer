@@ -691,7 +691,7 @@ export function DotMatrixTestPage() {
         data-click-flash="false"
       />
 
-      <header className="aptos-header dot-test-header">
+      <header className="aptos-header dot-test-header" data-tauri-drag-region="true">
         <button
           type="button"
           className="bracket-button glitch-hover"
@@ -702,7 +702,7 @@ export function DotMatrixTestPage() {
           [ Menu ]
         </button>
 
-        <div className="aptos-wordmark glitch-text" data-text="OPNR.GG">
+        <div className="aptos-wordmark glitch-text" data-text="OPNR.GG" data-tauri-drag-region="true">
           OPNR.GG
         </div>
 

@@ -1,23 +1,12 @@
 import { useEffect, useState } from "react";
-
-declare global {
-  interface Window {
-    opnrShell?: {
-      minimize: () => Promise<void>;
-      toggleMaximize: () => Promise<void>;
-      close: () => Promise<void>;
-      isMaximized: () => Promise<boolean>;
-      onMaximizedChange: (callback: (value: boolean) => void) => () => void;
-    };
-  }
-}
+import { getWindowShell } from "../shell/windowControls";
 
 type TitleBarProps = {
   variant?: "bar" | "controls";
 };
 
 export function TitleBar({ variant = "bar" }: TitleBarProps) {
-  const shell = typeof window !== "undefined" ? window.opnrShell : undefined;
+  const shell = getWindowShell();
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
@@ -87,7 +76,7 @@ export function TitleBar({ variant = "bar" }: TitleBarProps) {
 
   return (
     <div className="titlebar">
-      <div className="titlebar-drag" />
+      <div className="titlebar-drag" data-tauri-drag-region="true" />
       {controls}
     </div>
   );

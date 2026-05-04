@@ -3,7 +3,6 @@
   "private": true,
   "version": "0.4.0",
   "type": "module",
-  "main": "electron/main.cjs",
   "scripts": {
     "launch": "node scripts/launch-dev.mjs",
     "dev": "vite",
@@ -15,16 +14,21 @@
     "data:validate": "tsx scripts/data-validate.ts",
     "data:scrape-live": "tsx scripts/scrape-mobalytics.ts",
     "icons:generate": "node scripts/generate-icon.mjs",
-    "electron:dev": "node scripts/electron-dev.mjs",
-    "electron:build": "npm run build && electron-builder --win portable",
+    "tauri": "tauri",
+    "tauri:dev": "npm run icons:generate && tauri dev",
+    "tauri:build": "npm run icons:generate && tauri build && node scripts/package-tauri-release.mjs",
+    "release:build": "npm run tauri:build",
     "prepare": "husky"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/plugin-opener": "^2.5.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@testing-library/user-event": "^14.6.1",
@@ -32,8 +36,6 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.4.1",
-    "electron": "^41.3.0",
-    "electron-builder": "^26.8.1",
     "husky": "^9.1.7",
     "jsdom": "^26.0.0",
     "playwright": "^1.51.1",
@@ -44,56 +46,5 @@
     "vite": "^6.2.1",
     "vite-plugin-singlefile": "^2.3.3",
     "vitest": "^3.0.7"
-  },
-  "build": {
-    "appId": "gg.opnr.viewer",
-    "productName": "opnr.gg",
-    "files": [
-      "dist/**/*",
-      "electron/**/*",
-      "!**/*.map",
-      "!**/*.md",
-      "!**/LICENSE*",
-      "!**/CHANGELOG*"
-    ],
-    "extraResources": [
-      {
-        "from": "build/icon.ico",
-        "to": "build/icon.ico"
-      },
-      {
-        "from": "build/icon.png",
-        "to": "build/icon.png"
-      }
-    ],
-    "directories": {
-      "output": "release",
-      "buildResources": "build"
-    },
-    "compression": "maximum",
-    "electronLanguages": [
-      "en-US"
-    ],
-    "win": {
-      "icon": "build/icon.ico",
-      "target": [
-        {
-          "target": "portable",
-          "arch": "x64"
-        }
-      ],
-      "artifactName": "opnr-gg-${version}-${arch}.${ext}",
-      "requestedExecutionLevel": "asInvoker"
-    },
-    "nsis": {
-      "artifactName": "opnr-gg-${version}-setup.${ext}",
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "opnr.gg"
-    },
-    "asar": true
   }
 }

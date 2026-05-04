@@ -329,8 +329,8 @@ describe("App", () => {
 
     fireEvent.mouseDown(dragHandle, { clientX: 20, clientY: 20 });
     await waitFor(() => expect(panel).toHaveClass("is-dragging"));
-    fireEvent.mouseMove(window, { clientX: 72, clientY: 61 });
-    fireEvent.mouseUp(window, { clientX: 72, clientY: 61 });
+    fireEvent.mouseMove(window, { clientX: 21, clientY: 21 });
+    fireEvent.mouseUp(window, { clientX: 21, clientY: 21 });
 
     await waitFor(() => {
       const saved = JSON.parse(localStorage.getItem("opnr:aptos-panel-layout:v1") ?? "{}");

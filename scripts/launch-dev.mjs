@@ -83,15 +83,28 @@ function ensureSupportedNode() {
 
 function hasInstalledDependencies() {
   const viteBin = path.join(repoRoot, "node_modules", ".bin", isWindows ? "vite.cmd" : "vite");
-  return existsSync(path.join(repoRoot, "node_modules")) && existsSync(viteBin);
+  const tauriBin = path.join(repoRoot, "node_modules", ".bin", isWindows ? "tauri.cmd" : "tauri");
+  return existsSync(path.join(repoRoot, "node_modules")) && existsSync(viteBin) && existsSync(tauriBin);
 }
 
 ensureSupportedNode();
+
+if (host !== DEFAULT_HOST || port !== String(DEFAULT_PORT)) {
+  console.error(`Tauri dev launches are fixed to http://${DEFAULT_HOST}:${DEFAULT_PORT}/.`);
+  console.error("Run npm run dev directly if you need a custom Vite host or port.");
+  process.exit(1);
+}
 
 if (args.install && !hasInstalledDependencies()) {
   console.log("Dependencies are missing. Running npm install...");
   run(npmCommand, ["install"]);
 }
 
-console.log(`Launching opnr.gg at http://${host}:${port}/`);
-run(npmCommand, ["run", "dev", "--", "--host", host, "--port", String(port), "--strictPort"]);
+console.log(`Launching opnr.gg desktop shell at http://${host}:${port}/`);
+run(npmCommand, ["run", "tauri:dev"], {
+  env: {
+    ...process.env,
+    OPNR_DEV_HOST: host,
+    OPNR_DEV_PORT: String(port)
+  }
+});

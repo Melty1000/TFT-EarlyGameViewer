@@ -6,13 +6,15 @@ function read(path: string) {
 }
 
 describe("portable launch script", () => {
-  it("is repo-relative, dependency-aware, and strict-port by default", () => {
+  it("is repo-relative, dependency-aware, and starts the Tauri desktop shell", () => {
     const packageJson = JSON.parse(read("package.json")) as { scripts: Record<string, string> };
+    const tauriConfig = JSON.parse(read("src-tauri/tauri.conf.json")) as { build: { beforeDevCommand: string } };
     const script = read("scripts/launch-dev.mjs");
 
     expect(packageJson.scripts.launch).toBe("node scripts/launch-dev.mjs");
     expect(script).toContain("DEFAULT_PORT = 3002");
-    expect(script).toContain("--strictPort");
+    expect(script).toContain("tauri:dev");
+    expect(tauriConfig.build.beforeDevCommand).toContain("--strictPort");
     expect(script).toContain("npm install");
     expect(script).toContain("node_modules");
     expect(script).toContain("fileURLToPath(import.meta.url)");
@@ -25,9 +27,9 @@ describe("portable launch script", () => {
     expect(launcher).toContain("set \"ROOT=%~dp0\"");
     expect(launcher).toContain("call npm run launch");
     expect(launcher).toContain("This window must stay open");
-    expect(launcher).toContain("AddMinutes(5)");
+    expect(launcher).toContain("Starting opnr.gg desktop shell");
     expect(launcher).toContain("pause");
-    expect(launcher).not.toContain("start \"opnr.gg Dev Server\"");
+    expect(launcher).not.toContain("Start-Process $url");
     expect(launcher).not.toContain("AddSeconds(30)");
     expect(launcher).not.toMatch(/D:\\|C:\\|HYPNO|Codex-CLI/);
   });
