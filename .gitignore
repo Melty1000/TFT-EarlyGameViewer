@@ -24,3 +24,7 @@ release/*
 
 # Local IDE/agent settings
 /.claude/
+/.codex/
+
+# Generated storyboard caches
+.waveform-cache/

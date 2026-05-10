@@ -1,0 +1,8 @@
+In TFT, the hardest part is not finding data. It is reading it fast enough to act.
+The meta is scattered across sources, formats, and assumptions.
+opnr.gg turns that noise into a board you can actually use.
+Sort the meta by source, rank, phase, evidence, champions, and items.
+Pick a line, and the whole board answers at once.
+Filter by the units and items in front of you, then pivot with confidence.
+Not a spreadsheet. A route through the next fight, carousel, augment, and rolldown.
+opnr.gg. Open the meta. Read the board. Roll on purpose.

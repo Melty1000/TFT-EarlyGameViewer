@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>opnr.gg Board View Shape Mockups</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --void: oklch(14% 0.012 265);
+        --panel: oklch(18% 0.012 265 / 0.92);
+        --panel-soft: oklch(20% 0.012 265 / 0.72);
+        --text: oklch(95% 0.005 260);
+        --muted: oklch(78% 0.006 260 / 0.58);
+        --line: oklch(90% 0.005 260 / 0.14);
+        --lime: oklch(88% 0.19 120);
+        --cyan: oklch(78% 0.14 220);
+        --violet: oklch(76% 0.13 292);
+        --gold: oklch(80% 0.13 78);
+        --orange: oklch(70% 0.16 38);
+        --font-wide: Rajdhani, "Arial Narrow", "Segoe UI", sans-serif;
+        --font-mono: "DM Mono", Consolas, "Courier New", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        padding: 24px;
+        background:
+          radial-gradient(circle at 1px 1px, oklch(90% 0.005 260 / 0.16) 1px, transparent 1px) 0 0 / 12px 12px,
+          var(--void);
+        color: var(--text);
+        font-family: var(--font-wide);
+      }
+
+      .sheet {
+        display: grid;
+        grid-template-columns: repeat(2, 340px);
+        gap: 28px 32px;
+        width: max-content;
+      }
+
+      .mock {
+        display: grid;
+        gap: 8px;
+      }
+
+      .caption {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        height: 18px;
+        color: var(--muted);
+        font-family: var(--font-mono);
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        line-height: 1;
+        text-transform: uppercase;
+      }
+
+      .caption strong {
+        color: var(--lime);
+        font-family: var(--font-wide);
+        font-size: 13px;
+        letter-spacing: 0;
+      }
+
+      .panel {
+        position: relative;
+        display: grid;
+        grid-template-rows: 32px minmax(0, 1fr);
+        width: 340px;
+        height: 232px;
+        overflow: hidden;
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        background:
+          linear-gradient(180deg, oklch(17% 0.012 265 / 0.66) 0 32px, var(--panel) 32px),
+          radial-gradient(circle at 1px 1px, oklch(90% 0.005 260 / 0.1) 1px, transparent 1px) 0 0 / 12px 12px;
+      }
+
+      .bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        min-width: 0;
+        padding: 0 9px;
+        color: var(--muted);
+        font-family: var(--font-mono);
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .bar span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .bar strong {
+        color: var(--lime);
+      }
+
+      .body {
+        position: relative;
+        min-height: 0;
+        padding: 7px 10px 9px;
+      }
+
+      .meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 14px;
+        color: var(--muted);
+        font-family: var(--font-mono);
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .meta strong {
+        color: var(--lime);
+      }
+
+      .board-wrap {
+        position: relative;
+        display: grid;
+        place-items: center;
+        height: calc(100% - 14px);
+        min-height: 0;
+      }
+
+      .board {
+        --hex: 38px;
+        --hex-width: calc(var(--hex) * 0.8660254);
+        --gap-x: 6px;
+        --gap-y: 2px;
+        position: relative;
+        width: calc((var(--hex-width) * 7) + (var(--gap-x) * 6) + ((var(--hex-width) + var(--gap-x)) / 2));
+        height: calc((var(--hex) * 3.25) + (var(--gap-y) * 3));
+      }
+
+      .cell {
+        position: absolute;
+        width: var(--hex-width);
+        height: var(--hex);
+        clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+        background: oklch(95% 0.005 260 / 0.045);
+      }
+
+      .cell::after {
+        content: "";
+        position: absolute;
+        inset: 1px;
+        clip-path: inherit;
+        background: oklch(10% 0.01 265 / 0.76);
+      }
+
+      .unit {
+        z-index: 2;
+        overflow: visible;
+        background: var(--cost, var(--lime));
+      }
+
+      .unit::before,
+      .unit::after {
+        content: "";
+        position: absolute;
+        z-index: 4;
+        width: 58%;
+        height: 1px;
+        background: var(--cost, var(--lime));
+        opacity: 0.85;
+        transform: rotate(30deg);
+      }
+
+      .unit::before {
+        top: 11%;
+        right: -2%;
+      }
+
+      .unit::after {
+        left: -2%;
+        bottom: 11%;
+      }
+
+      .unit img {
+        position: absolute;
+        inset: 2px;
+        z-index: 2;
+        width: calc(100% - 4px);
+        height: calc(100% - 4px);
+        clip-path: inherit;
+        object-fit: cover;
+        transform: scale(1.08);
+      }
+
+      .stars {
+        position: absolute;
+        left: 50%;
+        top: 1px;
+        z-index: 5;
+        color: var(--lime);
+        font-family: var(--font-mono);
+        font-size: 8px;
+        font-weight: 900;
+        line-height: 1;
+        text-shadow: 0 1px 0 oklch(6% 0.01 265);
+        transform: translateX(-50%);
+      }
+
+      .items {
+        position: absolute;
+        inset: auto 3px 1px;
+        z-index: 6;
+        display: flex;
+        justify-content: center;
+        gap: 1px;
+      }
+
+      .items img {
+        position: static;
+        width: 11px;
+        height: 11px;
+        clip-path: none;
+        border: 1px solid oklch(92% 0.005 260 / 0.18);
+        object-fit: cover;
+        transform: none;
+      }
+
+      .variant-a .board {
+        --hex: 42px;
+      }
+
+      .variant-a .body {
+        padding-inline: 7px;
+      }
+
+      .variant-a .cell {
+        background: oklch(95% 0.005 260 / 0.035);
+      }
+
+      .variant-b .zone {
+        position: absolute;
+        left: 12px;
+        right: 12px;
+        height: 42px;
+        border-top: 1px solid oklch(88% 0.005 260 / 0.09);
+        background: linear-gradient(90deg, transparent, var(--zone), transparent);
+        pointer-events: none;
+      }
+
+      .variant-b .zone.front {
+        bottom: 14px;
+        --zone: oklch(88% 0.19 120 / 0.09);
+      }
+
+      .variant-b .zone.carry {
+        top: 58px;
+        --zone: oklch(78% 0.14 220 / 0.08);
+      }
+
+      .variant-b .zone-label {
+        position: absolute;
+        left: 12px;
+        color: oklch(90% 0.005 260 / 0.36);
+        font-family: var(--font-mono);
+        font-size: 8px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .variant-b .zone-label.carry {
+        top: 42px;
+      }
+
+      .variant-b .zone-label.front {
+        bottom: 56px;
+      }
+
+      .variant-c .body {
+        display: grid;
+        grid-template-rows: 14px minmax(0, 1fr) 32px;
+        gap: 4px;
+      }
+
+      .variant-c .board-wrap {
+        height: auto;
+      }
+
+      .variant-c .board {
+        --hex: 35px;
+      }
+
+      .carry-rail {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 5px;
+      }
+
+      .carry-card {
+        display: grid;
+        grid-template-columns: 22px minmax(0, 1fr);
+        align-items: center;
+        gap: 5px;
+        min-width: 0;
+        padding: 4px 5px;
+        border-top: 1px solid oklch(90% 0.005 260 / 0.12);
+        background: oklch(95% 0.005 260 / 0.035);
+        color: var(--muted);
+        font-family: var(--font-mono);
+        font-size: 8px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        line-height: 1;
+        text-transform: uppercase;
+      }
+
+      .carry-card img {
+        width: 22px;
+        height: 22px;
+        object-fit: cover;
+      }
+
+      .carry-card strong {
+        display: block;
+        overflow: hidden;
+        color: var(--text);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .variant-d .body {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 82px;
+        gap: 7px;
+      }
+
+      .variant-d .left {
+        display: grid;
+        grid-template-rows: 14px minmax(0, 1fr);
+        min-width: 0;
+      }
+
+      .variant-d .board {
+        --hex: 34px;
+      }
+
+      .inspect {
+        display: grid;
+        align-content: start;
+        gap: 6px;
+        min-width: 0;
+        padding-top: 1px;
+        border-top: 1px solid oklch(90% 0.005 260 / 0.12);
+        color: var(--muted);
+        font-family: var(--font-mono);
+        font-size: 8px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .inspect img.hero {
+        width: 42px;
+        height: 42px;
+        object-fit: cover;
+      }
+
+      .inspect strong {
+        color: var(--lime);
+        font-family: var(--font-wide);
+        font-size: 16px;
+        letter-spacing: 0;
+        line-height: 0.9;
+      }
+
+      .inspect .mini-items {
+        display: flex;
+        gap: 3px;
+      }
+
+      .inspect .mini-items img {
+        width: 18px;
+        height: 18px;
+        object-fit: cover;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sheet">
+      <section class="mock">
+        <div class="caption"><strong>A Board Max</strong><span>largest readable board, no extra UI</span></div>
+        <div class="panel variant-a">
+          <div class="bar"><span>02 / Board View</span><strong>[ Drag ] [ - ]</strong></div>
+          <div class="body">
+            <div class="meta"><span>Late Board</span><strong>9 Units</strong></div>
+            <div class="board-wrap"><div class="board" data-board></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="mock">
+        <div class="caption"><strong>B Zone Read</strong><span>subtle front/carry zones, board still primary</span></div>
+        <div class="panel variant-b">
+          <div class="bar"><span>02 / Board View</span><strong>[ Drag ] [ - ]</strong></div>
+          <div class="body">
+            <div class="meta"><span>Late Board</span><strong>9 Units</strong></div>
+            <div class="zone carry"></div>
+            <div class="zone front"></div>
+            <span class="zone-label carry">Carry line</span>
+            <span class="zone-label front">Front line</span>
+            <div class="board-wrap"><div class="board" data-board></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="mock">
+        <div class="caption"><strong>C Carry Rail</strong><span>board plus item carriers, still compact</span></div>
+        <div class="panel variant-c">
+          <div class="bar"><span>02 / Board View</span><strong>[ Drag ] [ - ]</strong></div>
+          <div class="body">
+            <div class="meta"><span>Late Board</span><strong>3 Carriers</strong></div>
+            <div class="board-wrap"><div class="board" data-board></div></div>
+            <div class="carry-rail">
+              <div class="carry-card"><img src="../../public/assets/champions/kogmaw.png" alt="" /><span><strong>Kog</strong>3 items</span></div>
+              <div class="carry-card"><img src="../../public/assets/champions/teemo.png" alt="" /><span><strong>Teemo</strong>2 items</span></div>
+              <div class="carry-card"><img src="../../public/assets/champions/malzahar.png" alt="" /><span><strong>Malz</strong>1 item</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="mock">
+        <div class="caption"><strong>D Hover Inspector</strong><span>board plus selected unit facts</span></div>
+        <div class="panel variant-d">
+          <div class="bar"><span>02 / Board View</span><strong>[ Drag ] [ - ]</strong></div>
+          <div class="body">
+            <div class="left">
+              <div class="meta"><span>Late Board</span><strong>9 Units</strong></div>
+              <div class="board-wrap"><div class="board" data-board></div></div>
+            </div>
+            <aside class="inspect">
+              <span>Selected</span>
+              <img class="hero" src="../../public/assets/champions/kogmaw.png" alt="" />
+              <strong>Kog'Maw</strong>
+              <span>Back 3 / Carry</span>
+              <div class="mini-items">
+                <img src="../../public/assets/items/guinsoo-s-rageblade.png" alt="" />
+                <img src="../../public/assets/items/jeweled-gauntlet.png" alt="" />
+                <img src="../../public/assets/items/hextech-gunblade.png" alt="" />
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const units = [
+        { slot: 3, champ: "kogmaw", cost: "var(--cyan)", stars: "***", items: ["guinsoo-s-rageblade", "jeweled-gauntlet", "hextech-gunblade"] },
+        { slot: 9, champ: "chogath", cost: "var(--violet)", stars: "**", items: ["gargoyle-stoneplate"] },
+        { slot: 11, champ: "lulu", cost: "var(--gold)", stars: "**", items: [] },
+        { slot: 13, champ: "teemo", cost: "var(--lime)", stars: "***", items: ["blue-buff", "jeweled-gauntlet"] },
+        { slot: 14, champ: "malzahar", cost: "var(--cyan)", stars: "**", items: ["spear-of-shojin"] },
+        { slot: 17, champ: "kennen", cost: "var(--gold)", stars: "**", items: [] },
+        { slot: 18, champ: "neeko", cost: "var(--violet)", stars: "*", items: [] },
+        { slot: 20, champ: "jinx", cost: "var(--orange)", stars: "**", items: ["infinity-edge"] },
+        { slot: 24, champ: "maokai", cost: "var(--lime)", stars: "**", items: [] }
+      ];
+
+      function cellPosition(index) {
+        const row = Math.floor(index / 7);
+        const column = index % 7;
+        const x = row % 2 === 1
+          ? `calc(${column} * (var(--hex-width) + var(--gap-x)) + (var(--hex-width) / 2) + (var(--gap-x) / 2))`
+          : `calc(${column} * (var(--hex-width) + var(--gap-x)))`;
+        const y = `calc(${row} * ((var(--hex) * 0.75) + var(--gap-y)))`;
+        return { x, y };
+      }
+
+      function makeBoard(board) {
+        for (let index = 0; index < 28; index += 1) {
+          const unit = units.find((candidate) => candidate.slot === index);
+          const cell = document.createElement("div");
+          const { x, y } = cellPosition(index);
+          cell.className = unit ? "cell unit" : "cell";
+          cell.style.left = x;
+          cell.style.top = y;
+
+          if (unit) {
+            cell.style.setProperty("--cost", unit.cost);
+            const champ = document.createElement("img");
+            champ.src = `../../public/assets/champions/${unit.champ}.png`;
+            champ.alt = "";
+            cell.append(champ);
+
+            const stars = document.createElement("span");
+            stars.className = "stars";
+            stars.textContent = unit.stars;
+            cell.append(stars);
+
+            if (unit.items.length) {
+              const itemStrip = document.createElement("span");
+              itemStrip.className = "items";
+              unit.items.forEach((name) => {
+                const item = document.createElement("img");
+                item.src = `../../public/assets/items/${name}.png`;
+                item.alt = "";
+                itemStrip.append(item);
+              });
+              cell.append(itemStrip);
+            }
+          }
+
+          board.append(cell);
+        }
+      }
+
+      document.querySelectorAll("[data-board]").forEach(makeBoard);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,973 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=3840, height=2160" />
+    <title>opnr.gg - Open. Read. Roll.</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: "Rajdhani";
+        src: url("../../../src/fonts/Rajdhani-Regular.ttf") format("truetype");
+        font-weight: 400;
+      }
+
+      @font-face {
+        font-family: "Rajdhani";
+        src: url("../../../src/fonts/Rajdhani-SemiBold.ttf") format("truetype");
+        font-weight: 600;
+      }
+
+      @font-face {
+        font-family: "Rajdhani";
+        src: url("../../../src/fonts/Rajdhani-Bold.ttf") format("truetype");
+        font-weight: 700;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 3840px;
+        height: 2160px;
+        margin: 0;
+        overflow: hidden;
+        background: #03050c;
+        color: #f8fbff;
+        font-family: "Rajdhani", "Segoe UI", sans-serif;
+      }
+
+      #root {
+        position: relative;
+        width: 3840px;
+        height: 2160px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 20% 18%, rgba(133, 96, 223, 0.2), transparent 30%),
+          radial-gradient(circle at 80% 44%, rgba(240, 179, 71, 0.14), transparent 28%),
+          linear-gradient(180deg, #050812 0%, #03050c 100%);
+      }
+
+      .scene {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        overflow: hidden;
+        background: #03050c;
+      }
+
+      .scene::before {
+        position: absolute;
+        inset: 0;
+        content: "";
+        background-image: radial-gradient(circle, rgba(255, 255, 255, 0.34) 2px, transparent 2.8px);
+        background-size: 32px 32px;
+        opacity: 0.38;
+      }
+
+      .scene::after {
+        position: absolute;
+        inset: 0;
+        content: "";
+        pointer-events: none;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 18%, transparent 82%, rgba(0, 0, 0, 0.2)),
+          repeating-linear-gradient(0deg, transparent 0 9px, rgba(255, 255, 255, 0.025) 9px 10px);
+        mix-blend-mode: screen;
+      }
+
+      .scene-content {
+        position: relative;
+        z-index: 2;
+        width: 100%;
+        height: 100%;
+        padding: 180px 220px;
+      }
+
+      .meta-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 44px;
+        color: rgba(255, 255, 255, 0.48);
+        font-size: 32px;
+        font-weight: 700;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 54px;
+        padding: 12px 20px 9px;
+        border: 1px solid rgba(240, 179, 71, 0.32);
+        color: #ffd27a;
+        background: rgba(240, 179, 71, 0.08);
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1;
+        text-transform: uppercase;
+      }
+
+      .headline {
+        color: #f8fbff;
+        font-size: 202px;
+        line-height: 0.82;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .headline.massive {
+        font-size: 268px;
+        max-width: 2200px;
+      }
+
+      .kicker {
+        color: #d8ff00;
+        font-size: 42px;
+        line-height: 1;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      .body-copy {
+        color: #c9d1de;
+        font-size: 56px;
+        line-height: 1.12;
+        font-weight: 600;
+      }
+
+      .gold {
+        color: #f0b347;
+      }
+
+      .acid {
+        color: #d8ff00;
+      }
+
+      .violet {
+        color: #a887ff;
+      }
+
+      .rule {
+        height: 2px;
+        background: linear-gradient(90deg, #f0b347, #d8ff00, rgba(133, 96, 223, 0));
+        transform-origin: left center;
+      }
+
+      .aperture {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        background:
+          radial-gradient(circle at 50% 50%, rgba(216, 255, 0, 0.12), transparent 15%),
+          radial-gradient(circle at 50% 50%, transparent 0 25%, rgba(0, 0, 0, 0.62) 52%, rgba(0, 0, 0, 0.9) 100%);
+      }
+
+      .data-shard {
+        position: absolute;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(5, 8, 18, 0.84);
+        color: #c9d1de;
+        padding: 28px 32px;
+        font-size: 31px;
+        font-weight: 700;
+        text-transform: uppercase;
+        box-shadow: 0 0 60px rgba(0, 0, 0, 0.5);
+      }
+
+      .data-shard b {
+        display: block;
+        margin-bottom: 8px;
+        color: #d8ff00;
+        font-size: 76px;
+        line-height: 0.9;
+      }
+
+      .provider-stack {
+        position: absolute;
+        left: 220px;
+        right: 220px;
+        top: 760px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 34px;
+      }
+
+      .provider-card {
+        min-height: 430px;
+        padding: 46px;
+        border: 1px solid rgba(240, 179, 71, 0.24);
+        background:
+          linear-gradient(180deg, rgba(10, 15, 27, 0.92), rgba(3, 5, 12, 0.96)),
+          #050812;
+        box-shadow: inset 0 -5px 0 rgba(216, 255, 0, 0.28);
+      }
+
+      .provider-card h3 {
+        margin: 0;
+        color: #d8ff00;
+        font-size: 72px;
+        line-height: 0.86;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .provider-card p {
+        margin: 42px 0 0;
+        color: #c9d1de;
+        font-size: 42px;
+        line-height: 1.08;
+        font-weight: 600;
+      }
+
+      .logo-lock {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        z-index: 4;
+      }
+
+      .logo-lock img {
+        width: 610px;
+        height: 610px;
+        object-fit: contain;
+        filter: drop-shadow(0 0 92px rgba(240, 179, 71, 0.42));
+      }
+
+      .brand-word {
+        margin-top: 54px;
+        font-size: 116px;
+        line-height: 0.88;
+        font-weight: 700;
+        text-align: center;
+        text-transform: uppercase;
+      }
+
+      .ui-plate {
+        position: absolute;
+        overflow: hidden;
+        border: 1px solid rgba(216, 255, 0, 0.38);
+        background: rgba(0, 0, 0, 0.66);
+        box-shadow:
+          0 0 0 1px rgba(255, 255, 255, 0.06),
+          0 58px 180px rgba(0, 0, 0, 0.64);
+      }
+
+      .ui-plate img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        opacity: 0.86;
+        filter: contrast(1.12) saturate(0.96);
+      }
+
+      .build-records {
+        position: absolute;
+        left: 300px;
+        right: 300px;
+        top: 680px;
+        z-index: 5;
+        display: grid;
+        gap: 22px;
+      }
+
+      .build-row {
+        display: grid;
+        grid-template-columns: 190px 1fr 520px 460px;
+        align-items: center;
+        gap: 30px;
+        min-height: 152px;
+        padding: 24px 32px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(0, 0, 0, 0.76);
+      }
+
+      .build-row.active {
+        border-color: rgba(216, 255, 0, 0.76);
+        box-shadow:
+          inset 0 0 0 2px rgba(216, 255, 0, 0.2),
+          0 0 80px rgba(216, 255, 0, 0.1);
+      }
+
+      .rank {
+        color: #d8ff00;
+        font-size: 74px;
+        line-height: 0.86;
+        font-weight: 700;
+      }
+
+      .build-title {
+        font-size: 66px;
+        line-height: 0.88;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .build-meta {
+        margin-top: 12px;
+        color: rgba(255, 255, 255, 0.52);
+        font-size: 27px;
+        line-height: 1;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .icon-strip {
+        display: flex;
+        gap: 10px;
+      }
+
+      .icon-strip img,
+      .portrait img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .icon {
+        width: 68px;
+        height: 68px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: #050812;
+      }
+
+      .panel-layout {
+        position: absolute;
+        inset: 190px 210px 180px;
+        z-index: 6;
+        display: grid;
+        grid-template-columns: 0.86fr 1.72fr 0.92fr;
+        grid-template-rows: 0.8fr 1fr;
+        gap: 30px;
+      }
+
+      .mini-panel {
+        position: relative;
+        overflow: hidden;
+        min-height: 360px;
+        padding: 34px;
+        border: 1px solid rgba(216, 255, 0, 0.28);
+        background: rgba(0, 0, 0, 0.74);
+      }
+
+      .mini-panel.center {
+        grid-row: span 2;
+      }
+
+      .mini-panel.big {
+        grid-row: span 2;
+      }
+
+      .panel-label {
+        color: rgba(255, 255, 255, 0.48);
+        font-size: 27px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .panel-value {
+        margin-top: 32px;
+        color: #f8fbff;
+        font-size: 86px;
+        line-height: 0.88;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .panel-small {
+        margin-top: 22px;
+        color: #d8ff00;
+        font-size: 34px;
+        line-height: 1.08;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .hex-board {
+        position: absolute;
+        left: 90px;
+        right: 90px;
+        bottom: 80px;
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 14px;
+      }
+
+      .hex {
+        aspect-ratio: 1;
+        border: 1px solid rgba(255, 255, 255, 0.13);
+        background: rgba(255, 255, 255, 0.035);
+        clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%);
+      }
+
+      .hex.fill {
+        border-color: rgba(216, 255, 0, 0.6);
+        background: rgba(216, 255, 0, 0.14);
+        box-shadow: inset 0 0 30px rgba(216, 255, 0, 0.16);
+      }
+
+      .similarity-field {
+        position: absolute;
+        left: 330px;
+        right: 330px;
+        top: 650px;
+        z-index: 5;
+        display: grid;
+        grid-template-columns: repeat(10, 1fr);
+        gap: 20px;
+      }
+
+      .portrait {
+        aspect-ratio: 1;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: rgba(0, 0, 0, 0.76);
+      }
+
+      .portrait.on {
+        border-color: #d8ff00;
+        box-shadow: 0 0 44px rgba(216, 255, 0, 0.26);
+      }
+
+      .signal-bars {
+        position: absolute;
+        left: 430px;
+        right: 430px;
+        bottom: 340px;
+        z-index: 5;
+        display: grid;
+        gap: 22px;
+      }
+
+      .signal-bar {
+        height: 36px;
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .signal-bar span {
+        display: block;
+        width: 0;
+        height: 100%;
+        background: linear-gradient(90deg, #f0b347, #d8ff00, #a887ff);
+      }
+
+      .route-grid {
+        position: absolute;
+        left: 270px;
+        right: 270px;
+        top: 645px;
+        z-index: 5;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 30px;
+      }
+
+      .route-card {
+        min-height: 520px;
+        padding: 44px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(0, 0, 0, 0.72);
+      }
+
+      .route-card b {
+        display: block;
+        color: #d8ff00;
+        font-size: 132px;
+        line-height: 0.78;
+      }
+
+      .route-card span {
+        display: block;
+        margin-top: 42px;
+        color: #c9d1de;
+        font-size: 42px;
+        line-height: 1.08;
+        font-weight: 600;
+      }
+
+      .end-layout {
+        position: absolute;
+        left: 310px;
+        right: 310px;
+        top: 520px;
+        bottom: 420px;
+        z-index: 3;
+        display: grid;
+        grid-template-columns: 1.05fr 1.62fr 0.92fr;
+        grid-template-rows: 1fr 0.76fr;
+        gap: 28px;
+      }
+
+      .layout-tile {
+        padding: 34px;
+        border: 1px solid rgba(216, 255, 0, 0.32);
+        background: rgba(0, 0, 0, 0.62);
+        color: rgba(255, 255, 255, 0.42);
+        font-size: 31px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .layout-tile.center {
+        grid-row: span 2;
+        border-color: rgba(216, 255, 0, 0.6);
+      }
+
+      .final-message {
+        position: absolute;
+        inset: 0;
+        z-index: 7;
+        display: grid;
+        place-items: center;
+        text-align: center;
+      }
+
+      .final-message h2 {
+        margin: 0;
+        font-size: 190px;
+        line-height: 0.82;
+        font-weight: 700;
+        text-transform: uppercase;
+        text-shadow: 0 0 72px rgba(216, 255, 0, 0.16);
+      }
+
+      .final-message p {
+        margin: 58px 0 0;
+        color: #d8ff00;
+        font-size: 62px;
+        line-height: 1;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      .stat-strip {
+        position: absolute;
+        left: 420px;
+        right: 420px;
+        bottom: 210px;
+        z-index: 8;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 24px;
+      }
+
+      .stat {
+        min-height: 130px;
+        padding: 24px 30px;
+        border: 1px solid rgba(240, 179, 71, 0.22);
+        background: rgba(0, 0, 0, 0.72);
+      }
+
+      .stat span {
+        display: block;
+        color: rgba(255, 255, 255, 0.46);
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .stat strong {
+        display: block;
+        margin-top: 12px;
+        color: #f8fbff;
+        font-size: 44px;
+        line-height: 0.95;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .caption-track {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 94px;
+        z-index: 20;
+        display: flex;
+        justify-content: center;
+        pointer-events: none;
+      }
+
+      .caption-group {
+        position: absolute;
+        max-width: 2820px;
+        padding: 18px 30px 14px;
+        border: 1px solid rgba(216, 255, 0, 0.24);
+        background: rgba(0, 0, 0, 0.68);
+        color: #f8fbff;
+        font-size: 58px;
+        line-height: 1.05;
+        font-weight: 700;
+        text-align: center;
+        text-transform: uppercase;
+        opacity: 0;
+        visibility: hidden;
+      }
+
+      .scan-line {
+        position: absolute;
+        left: -20%;
+        right: -20%;
+        height: 4px;
+        z-index: 9;
+        background: linear-gradient(90deg, transparent, #f0b347, #d8ff00, transparent);
+        opacity: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="45"
+      data-width="3840"
+      data-height="2160"
+    >
+      <audio
+        id="narration"
+        src="assets/narration.wav"
+        data-start="0"
+        data-duration="40.25"
+        data-track-index="3"
+      ></audio>
+
+      <div id="scene-chaos" class="clip scene" data-start="0" data-duration="4" data-track-index="1">
+        <div class="scene-content">
+          <div class="meta-row">
+            <span>[ LOBBY TIMER ACTIVE ]</span>
+            <span>[ PATCH 17 / META READ ]</span>
+          </div>
+          <div style="position:absolute; left:220px; top:430px;">
+            <div class="kicker">Cold open</div>
+            <div class="headline massive" style="margin-top:42px;">The round starts before research catches up.</div>
+          </div>
+          <div class="data-shard" style="left:2400px; top:410px;"><b>18</b>tabs open</div>
+          <div class="data-shard" style="left:2780px; top:800px;"><b>5</b>sources disagree</div>
+          <div class="data-shard" style="left:2350px; top:1210px;"><b>90s</b>until commit</div>
+          <div class="data-shard" style="left:3040px; top:1380px;"><b>0</b>clear line</div>
+          <div class="rule" style="position:absolute; left:220px; right:1400px; top:1740px;"></div>
+          <div class="scan-line" style="top:1080px;"></div>
+        </div>
+      </div>
+
+      <div id="scene-sources" class="clip scene" data-start="4" data-duration="5" data-track-index="1">
+        <div class="scene-content">
+          <div class="meta-row">
+            <span>[ SOURCE OVERLOAD ]</span>
+            <span><span class="tag">00:04-00:09</span></span>
+          </div>
+          <div style="position:absolute; left:220px; top:380px;">
+            <div class="kicker">Every source knows something</div>
+            <div class="headline" style="max-width:2950px; margin-top:44px;">None of them fit the exact board in front of you.</div>
+          </div>
+          <div class="provider-stack">
+            <div class="provider-card">
+              <h3>TFTAcademy</h3>
+              <p>Route signal, leveling logic, and comp intent live in one shape.</p>
+            </div>
+            <div class="provider-card">
+              <h3>Mobalytics</h3>
+              <p>Powerful comp records, tiers, items, and guide language live in another.</p>
+            </div>
+            <div class="provider-card">
+              <h3>MetaTFT</h3>
+              <p>Stat pressure matters, but it still needs a playable context.</p>
+            </div>
+          </div>
+          <div class="scan-line" style="top:1510px;"></div>
+        </div>
+      </div>
+
+      <div id="scene-reveal" class="clip scene" data-start="9" data-duration="4" data-track-index="1">
+        <div class="aperture"></div>
+        <div class="logo-lock">
+          <div>
+            <img src="assets/opnrgg.svg" alt="opnr.gg" />
+            <div class="brand-word">opnr.gg</div>
+          </div>
+        </div>
+        <div class="scan-line" style="top:1080px;"></div>
+      </div>
+
+      <div id="scene-browser" class="clip scene" data-start="13" data-duration="6" data-track-index="1">
+        <div class="scene-content">
+          <div class="meta-row">
+            <span>[ BUILD BROWSER ]</span>
+            <span><span class="tag">105 records visible</span></span>
+          </div>
+          <div class="ui-plate" style="left:310px; right:310px; top:350px; bottom:260px;">
+            <img src="assets/ui-empty.png" alt="opnr.gg build browser" />
+          </div>
+          <div class="build-records">
+            <div class="build-row active">
+              <div class="rank">[ S ]</div>
+              <div>
+                <div class="build-title">Cards & Cartridges</div>
+                <div class="build-meta">Mobalytics / Early / 22 evidence / active</div>
+              </div>
+              <div class="icon-strip">
+                <div class="icon"><img src="assets/champions/leona.png" alt="" /></div>
+                <div class="icon"><img src="assets/champions/sona.png" alt="" /></div>
+                <div class="icon"><img src="assets/champions/akali.png" alt="" /></div>
+                <div class="icon"><img src="assets/champions/jinx.png" alt="" /></div>
+              </div>
+              <div class="build-meta">components resolved</div>
+            </div>
+            <div class="build-row">
+              <div class="rank">[ S ]</div>
+              <div>
+                <div class="build-title">Crab Wave</div>
+                <div class="build-meta">Mobalytics / Early / 22 evidence</div>
+              </div>
+              <div class="icon-strip">
+                <div class="icon"><img src="assets/champions/aatrox.png" alt="" /></div>
+                <div class="icon"><img src="assets/champions/ahri.png" alt="" /></div>
+                <div class="icon"><img src="assets/champions/bard.png" alt="" /></div>
+                <div class="icon"><img src="assets/champions/belveth.png" alt="" /></div>
+              </div>
+              <div class="build-meta">board phase ready</div>
+            </div>
+            <div class="build-row">
+              <div class="rank">[ S ]</div>
+              <div>
+                <div class="build-title">Fateweaver Reroll</div>
+                <div class="build-meta">TFTAcademy / Early / 32 evidence</div>
+              </div>
+              <div class="icon-strip">
+                <div class="icon"><img src="assets/champions/annie.png" alt="" /></div>
+                <div class="icon"><img src="assets/champions/ashe.png" alt="" /></div>
+                <div class="icon"><img src="assets/champions/aurora.png" alt="" /></div>
+                <div class="icon"><img src="assets/champions/azir.png" alt="" /></div>
+              </div>
+              <div class="build-meta">source preserved</div>
+            </div>
+          </div>
+          <div class="scan-line" style="top:600px;"></div>
+        </div>
+      </div>
+
+      <div id="scene-panels" class="clip scene" data-start="19" data-duration="7" data-track-index="1">
+        <div class="ui-plate" style="left:170px; right:170px; top:140px; bottom:130px;">
+          <img src="assets/ui-selected.png" alt="opnr.gg selected build" />
+        </div>
+        <div class="panel-layout">
+          <div class="mini-panel big">
+            <div class="panel-label">03 / synergies</div>
+            <div class="panel-value">StarGazer 3<br />Bastion 2<br />Rogue 2</div>
+            <div class="panel-small">source traits normalized</div>
+          </div>
+          <div class="mini-panel center">
+            <div class="panel-label">02 / board view</div>
+            <div class="panel-value">Late board<br />9 units</div>
+            <div class="hex-board">
+              <div class="hex"></div><div class="hex fill"></div><div class="hex"></div><div class="hex fill"></div><div class="hex"></div><div class="hex"></div><div class="hex fill"></div>
+              <div class="hex fill"></div><div class="hex"></div><div class="hex fill"></div><div class="hex"></div><div class="hex fill"></div><div class="hex"></div><div class="hex"></div>
+              <div class="hex"></div><div class="hex fill"></div><div class="hex"></div><div class="hex fill"></div><div class="hex"></div><div class="hex fill"></div><div class="hex"></div>
+            </div>
+          </div>
+          <div class="mini-panel">
+            <div class="panel-label">01 / overview</div>
+            <div class="panel-value">Cards &<br />Cartridges</div>
+          </div>
+          <div class="mini-panel">
+            <div class="panel-label">06 / components</div>
+            <div class="panel-value">7 demands<br />resolved</div>
+          </div>
+        </div>
+        <div class="scan-line" style="top:1030px;"></div>
+      </div>
+
+      <div id="scene-filter" class="clip scene" data-start="26" data-duration="6" data-track-index="1">
+        <div class="scene-content">
+          <div class="meta-row">
+            <span>[ LATE SIMILARITY FILTER ]</span>
+            <span><span class="tag">decision assist</span></span>
+          </div>
+          <div style="position:absolute; left:220px; top:350px;">
+            <div class="kicker">From what you hit</div>
+            <div class="headline" style="max-width:3050px; margin-top:38px;">Find the closest playable line.</div>
+          </div>
+          <div class="similarity-field">
+            <div class="portrait on"><img src="assets/champions/leona.png" alt="" /></div>
+            <div class="portrait"><img src="assets/champions/sona.png" alt="" /></div>
+            <div class="portrait on"><img src="assets/champions/jinx.png" alt="" /></div>
+            <div class="portrait"><img src="assets/champions/akali.png" alt="" /></div>
+            <div class="portrait"><img src="assets/champions/bard.png" alt="" /></div>
+            <div class="portrait on"><img src="assets/champions/ashe.png" alt="" /></div>
+            <div class="portrait"><img src="assets/champions/belveth.png" alt="" /></div>
+            <div class="portrait"><img src="assets/champions/annie.png" alt="" /></div>
+            <div class="portrait on"><img src="assets/champions/azir.png" alt="" /></div>
+            <div class="portrait"><img src="assets/champions/aurora.png" alt="" /></div>
+            <div class="portrait"><img src="assets/champions/aatrox.png" alt="" /></div>
+            <div class="portrait on"><img src="assets/champions/ahri.png" alt="" /></div>
+            <div class="portrait"><img src="assets/champions/anivia.png" alt="" /></div>
+            <div class="portrait"><img src="assets/champions/aphelios.png" alt="" /></div>
+            <div class="portrait on"><img src="assets/champions/ambessa.png" alt="" /></div>
+            <div class="portrait"><img src="assets/champions/blitzcrank.png" alt="" /></div>
+            <div class="portrait"><img src="assets/champions/briar.png" alt="" /></div>
+            <div class="portrait on"><img src="assets/champions/caitlyn.png" alt="" /></div>
+            <div class="portrait"><img src="assets/champions/diana.png" alt="" /></div>
+            <div class="portrait"><img src="assets/champions/darius.png" alt="" /></div>
+          </div>
+          <div class="signal-bars">
+            <div class="signal-bar"><span style="--w:84%"></span></div>
+            <div class="signal-bar"><span style="--w:72%"></span></div>
+            <div class="signal-bar"><span style="--w:58%"></span></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="scene-route" class="clip scene" data-start="32" data-duration="7" data-track-index="1">
+        <div class="scene-content">
+          <div class="meta-row">
+            <span>[ ACTIONABLE ROUTE ]</span>
+            <span><span class="tag">level / augment / board</span></span>
+          </div>
+          <div style="position:absolute; left:220px; top:345px;">
+            <div class="kicker">From recommendation to action</div>
+            <div class="headline" style="max-width:3150px; margin-top:38px;">A route through the next fight.</div>
+          </div>
+          <div class="route-grid">
+            <div class="route-card"><b>L4</b><span>Stabilize early units and hold route-critical pairs.</span></div>
+            <div class="route-card"><b>L5</b><span>Identify reroll window or preserve econ for tempo.</span></div>
+            <div class="route-card"><b>L6</b><span>Commit components and check augment alignment.</span></div>
+            <div class="route-card"><b>L7</b><span>Lock board shape and compare strongest pivots.</span></div>
+          </div>
+          <div class="scan-line" style="top:1730px;"></div>
+        </div>
+      </div>
+
+      <div id="scene-final" class="clip scene" data-start="39" data-duration="6" data-track-index="1">
+        <div class="end-layout">
+          <div class="layout-tile">Build controls</div>
+          <div class="layout-tile center">Build browser / source evidence</div>
+          <div class="layout-tile">Overview</div>
+          <div class="layout-tile">Similarities</div>
+          <div class="layout-tile">Board view</div>
+        </div>
+        <div class="final-message">
+          <div>
+            <h2>Open. Read. Roll.</h2>
+            <p>opnr.gg</p>
+          </div>
+        </div>
+        <div class="stat-strip">
+          <div class="stat"><span>Surface</span><strong>Desktop first</strong></div>
+          <div class="stat"><span>Data</span><strong>Local normalized set</strong></div>
+          <div class="stat"><span>Workflow</span><strong>Drag panels</strong></div>
+          <div class="stat"><span>Outcome</span><strong>Faster decisions</strong></div>
+        </div>
+        <div class="scan-line" style="top:1080px;"></div>
+      </div>
+
+      <div id="caption-layer" class="clip" data-start="0" data-duration="45" data-track-index="2">
+        <div class="caption-track">
+          <div class="caption-group" id="cap-0">In TFT, the hard part is reading fast enough to act.</div>
+          <div class="caption-group" id="cap-1">The meta is scattered across sources, formats, and assumptions.</div>
+          <div class="caption-group" id="cap-2">opnr.gg turns that noise into a board you can actually use.</div>
+          <div class="caption-group" id="cap-3">Sort by source, rank, phase, evidence, champions, and items.</div>
+          <div class="caption-group" id="cap-4">Pick a line, and the whole board answers at once.</div>
+          <div class="caption-group" id="cap-5">Filter by the units and items in front of you.</div>
+          <div class="caption-group" id="cap-6">Not a spreadsheet. A route through the next fight.</div>
+          <div class="caption-group" id="cap-7">opnr.gg. Open the meta. Read the board. Roll on purpose.</div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+
+      const tl = gsap.timeline({ paused: true });
+
+      function showScene(selector, start, duration, holdToEnd = false) {
+        tl.set(selector, { opacity: 1 }, start);
+        tl.fromTo(selector, { filter: "blur(18px)" }, { filter: "blur(0px)", duration: 0.35, ease: "power3.out" }, start + 0.05);
+        if (!holdToEnd) {
+          tl.to(selector, { opacity: 0, filter: "blur(14px)", duration: 0.28, ease: "power3.in" }, start + duration - 0.3);
+        }
+      }
+
+      showScene("#scene-chaos", 0, 4);
+      showScene("#scene-sources", 4, 5);
+      showScene("#scene-reveal", 9, 4);
+      showScene("#scene-browser", 13, 6);
+      showScene("#scene-panels", 19, 7);
+      showScene("#scene-filter", 26, 6);
+      showScene("#scene-route", 32, 7);
+      showScene("#scene-final", 39, 6, true);
+
+      tl.from("#scene-chaos .headline", { x: -180, opacity: 0, duration: 0.72, ease: "expo.out" }, 0.18);
+      tl.from("#scene-chaos .kicker", { y: -42, opacity: 0, duration: 0.42, ease: "power4.out" }, 0.12);
+      tl.from("#scene-chaos .data-shard", { y: 110, opacity: 0, scale: 0.88, duration: 0.34, stagger: 0.12, ease: "back.out(1.7)" }, 0.55);
+      tl.fromTo("#scene-chaos .rule", { scaleX: 0 }, { scaleX: 1, duration: 0.62, ease: "power4.out" }, 1.0);
+
+      tl.from("#scene-sources .headline", { x: -150, opacity: 0, duration: 0.58, ease: "expo.out" }, 4.18);
+      tl.from("#scene-sources .provider-card", { y: 160, opacity: 0, duration: 0.48, stagger: 0.13, ease: "back.out(1.25)" }, 4.95);
+      tl.to("#scene-sources .provider-card", { x: function (i) { return (i - 1) * -52; }, duration: 1.4, ease: "sine.inOut" }, 6.7);
+
+      tl.from("#scene-reveal .logo-lock img", { scale: 0.35, rotation: -22, opacity: 0, duration: 0.72, ease: "expo.out" }, 9.18);
+      tl.from("#scene-reveal .brand-word", { y: 90, opacity: 0, duration: 0.44, ease: "power4.out" }, 9.62);
+      tl.to("#scene-reveal .logo-lock img", { scale: 1.08, duration: 2.1, ease: "sine.inOut" }, 10.0);
+
+      tl.from("#scene-browser .ui-plate", { scale: 1.13, opacity: 0, duration: 0.62, ease: "power3.out" }, 13.1);
+      tl.from("#scene-browser .build-row", { x: -170, opacity: 0, duration: 0.34, stagger: 0.12, ease: "expo.out" }, 13.72);
+      tl.from("#scene-browser .icon", { scale: 0.4, opacity: 0, duration: 0.2, stagger: 0.018, ease: "back.out(2)" }, 14.25);
+      tl.to("#scene-browser .build-row.active", { boxShadow: "inset 0 0 0 2px rgba(216,255,0,0.36), 0 0 110px rgba(216,255,0,0.22)", duration: 0.5, yoyo: true, repeat: 1, ease: "sine.inOut" }, 15.2);
+
+      tl.from("#scene-panels .ui-plate", { scale: 1.08, opacity: 0, duration: 0.46, ease: "power4.out" }, 19.05);
+      tl.from("#scene-panels .mini-panel", { y: 100, opacity: 0, duration: 0.45, stagger: 0.1, ease: "expo.out" }, 19.58);
+      tl.from("#scene-panels .hex.fill", { scale: 0.2, opacity: 0, duration: 0.24, stagger: 0.035, ease: "back.out(2.2)" }, 20.55);
+      tl.to("#scene-panels .mini-panel.center", { borderColor: "rgba(216,255,0,0.78)", duration: 0.45, yoyo: true, repeat: 1, ease: "sine.inOut" }, 22.8);
+
+      tl.from("#scene-filter .headline", { x: -160, opacity: 0, duration: 0.48, ease: "expo.out" }, 26.18);
+      tl.from("#scene-filter .portrait", { y: 90, opacity: 0, scale: 0.72, duration: 0.28, stagger: 0.025, ease: "back.out(1.4)" }, 26.7);
+      tl.to("#scene-filter .portrait.on", { scale: 1.08, duration: 0.22, yoyo: true, repeat: 1, stagger: 0.05, ease: "power3.out" }, 27.55);
+      tl.to("#scene-filter .signal-bar span", { width: function () { return this.targets()[0].style.getPropertyValue("--w"); }, duration: 0.7, stagger: 0.11, ease: "power4.out" }, 28.35);
+
+      tl.from("#scene-route .headline", { x: -150, opacity: 0, duration: 0.54, ease: "expo.out" }, 32.18);
+      tl.from("#scene-route .route-card", { y: 170, opacity: 0, duration: 0.48, stagger: 0.11, ease: "back.out(1.2)" }, 32.9);
+      tl.to("#scene-route .route-card b", { color: "#ffd27a", duration: 0.24, yoyo: true, repeat: 1, stagger: 0.13, ease: "power2.inOut" }, 35.2);
+
+      tl.from("#scene-final .layout-tile", { y: 140, opacity: 0, duration: 0.48, stagger: 0.07, ease: "expo.out" }, 39.18);
+      tl.from("#scene-final .final-message h2", { scale: 0.82, opacity: 0, duration: 0.72, ease: "power4.out" }, 39.82);
+      tl.from("#scene-final .final-message p", { y: 60, opacity: 0, duration: 0.42, ease: "power3.out" }, 40.35);
+      tl.from("#scene-final .stat", { y: 70, opacity: 0, duration: 0.34, stagger: 0.08, ease: "back.out(1.2)" }, 41.15);
+
+      tl.to(".scan-line", { opacity: 0.75, x: "118%", duration: 0.42, ease: "power4.inOut", stagger: 0.02 }, 0.72);
+      tl.to(".scan-line", { opacity: 0, duration: 0.15, ease: "power2.out" }, 1.18);
+
+      const captions = [
+        { id: "#cap-0", start: 0.4, end: 4.0 },
+        { id: "#cap-1", start: 4.4, end: 8.8 },
+        { id: "#cap-2", start: 9.4, end: 12.8 },
+        { id: "#cap-3", start: 13.6, end: 18.8 },
+        { id: "#cap-4", start: 19.6, end: 25.4 },
+        { id: "#cap-5", start: 26.7, end: 31.5 },
+        { id: "#cap-6", start: 32.6, end: 38.5 },
+        { id: "#cap-7", start: 39.8, end: 44.6 },
+      ];
+
+      captions.forEach(function (cap) {
+        tl.set(cap.id, { visibility: "visible" }, cap.start);
+        tl.fromTo(cap.id, { y: 70, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.22, ease: "power3.out" }, cap.start);
+        tl.to(cap.id, { y: -36, opacity: 0, scale: 0.98, duration: 0.16, ease: "power2.in" }, cap.end - 0.18);
+        tl.set(cap.id, { visibility: "hidden", opacity: 0 }, cap.end);
+      });
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

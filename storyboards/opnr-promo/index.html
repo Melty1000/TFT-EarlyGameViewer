@@ -1,0 +1,1440 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>opnr.gg Promo Storyboard</title>
+    <style>
+      @font-face {
+        font-family: "Rajdhani";
+        src: url("../../src/fonts/Rajdhani-Regular.ttf") format("truetype");
+        font-weight: 400;
+      }
+
+      @font-face {
+        font-family: "Rajdhani";
+        src: url("../../src/fonts/Rajdhani-SemiBold.ttf") format("truetype");
+        font-weight: 600;
+      }
+
+      @font-face {
+        font-family: "Rajdhani";
+        src: url("../../src/fonts/Rajdhani-Bold.ttf") format("truetype");
+        font-weight: 700;
+      }
+
+      :root {
+        color-scheme: dark;
+        --bg: #03050c;
+        --panel: rgba(8, 12, 22, 0.88);
+        --panel-strong: rgba(5, 8, 18, 0.96);
+        --ink: #ffffff;
+        --soft: #c9d1de;
+        --dim: rgba(255, 255, 255, 0.48);
+        --line: rgba(240, 179, 71, 0.24);
+        --line-soft: rgba(240, 179, 71, 0.12);
+        --gold: #f0b347;
+        --gold-hot: #ffd27a;
+        --violet: #8560df;
+        --violet-hot: #a887ff;
+        --acid: #d8ff00;
+        --grid: rgba(255, 255, 255, 0.34);
+        --mono: "Rajdhani", "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        min-width: 1180px;
+        color: var(--ink);
+        font-family: var(--mono);
+        background:
+          radial-gradient(circle at 18% 12%, rgba(133, 96, 223, 0.18), transparent 30%),
+          radial-gradient(circle at 82% 24%, rgba(240, 179, 71, 0.13), transparent 34%),
+          linear-gradient(180deg, #03050c 0%, #050812 48%, #020309 100%);
+        letter-spacing: 0;
+      }
+
+      body::before {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        content: "";
+        background-image: radial-gradient(circle, var(--grid) 1px, transparent 1.5px);
+        background-size: 16px 16px;
+        opacity: 0.42;
+        mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+        z-index: 0;
+      }
+
+      .progress {
+        position: fixed;
+        inset: 0 0 auto;
+        height: 3px;
+        background: linear-gradient(90deg, var(--gold), var(--acid), var(--violet-hot));
+        transform-origin: left center;
+        transform: scaleX(0);
+        z-index: 20;
+      }
+
+      .rail {
+        position: fixed;
+        top: 50%;
+        right: 28px;
+        width: 16px;
+        transform: translateY(-50%);
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        z-index: 15;
+      }
+
+      .rail a {
+        display: block;
+        width: 10px;
+        height: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.42);
+        background: rgba(255, 255, 255, 0.08);
+        text-decoration: none;
+      }
+
+      .rail a:hover {
+        border-color: var(--acid);
+        background: var(--acid);
+      }
+
+      .deck {
+        position: relative;
+        z-index: 1;
+      }
+
+      .slide {
+        min-height: 100vh;
+        padding: 64px 84px;
+        display: grid;
+        place-items: center;
+        scroll-snap-align: start;
+      }
+
+      .slide-inner {
+        width: min(1680px, calc(100vw - 168px));
+      }
+
+      .topline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 20px;
+        color: var(--dim);
+        font-size: 16px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+
+      .tag-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .tag {
+        border: 1px solid var(--line);
+        background: rgba(240, 179, 71, 0.08);
+        color: var(--gold-hot);
+        padding: 6px 9px 5px;
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .cover {
+        min-height: 100vh;
+        padding: 60px 80px 48px;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 32px;
+      }
+
+      .cover-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--line-soft);
+        padding-bottom: 20px;
+      }
+
+      .brand-lockup {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+
+      .brand-mark {
+        width: 58px;
+        height: 58px;
+        object-fit: contain;
+        filter: drop-shadow(0 0 18px rgba(240, 179, 71, 0.34));
+      }
+
+      .brand-name {
+        font-size: 48px;
+        line-height: 0.9;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .cover-body {
+        display: grid;
+        grid-template-columns: 0.95fr 1.35fr;
+        gap: 48px;
+        align-items: center;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      .eyebrow {
+        margin-bottom: 14px;
+        color: var(--acid);
+        font-size: 18px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+      }
+
+      h1 {
+        max-width: 680px;
+        font-size: clamp(76px, 6vw, 128px);
+        line-height: 0.82;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .lead {
+        max-width: 660px;
+        margin-top: 28px;
+        color: var(--soft);
+        font-size: 28px;
+        line-height: 1.18;
+        font-weight: 600;
+      }
+
+      .spec-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-top: 36px;
+      }
+
+      .spec {
+        border: 1px solid var(--line-soft);
+        background: rgba(5, 8, 18, 0.72);
+        padding: 14px 16px;
+      }
+
+      .spec span {
+        display: block;
+        color: var(--dim);
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+      }
+
+      .spec strong {
+        display: block;
+        margin-top: 5px;
+        color: var(--ink);
+        font-size: 22px;
+        line-height: 1;
+        text-transform: uppercase;
+      }
+
+      .hero-board {
+        position: relative;
+        overflow: hidden;
+        aspect-ratio: 16 / 9;
+        border: 1px solid rgba(216, 255, 0, 0.42);
+        background:
+          linear-gradient(180deg, rgba(8, 12, 22, 0.78), rgba(0, 0, 0, 0.96)),
+          #050812;
+        box-shadow:
+          0 0 0 1px rgba(255, 255, 255, 0.06),
+          0 42px 120px rgba(0, 0, 0, 0.58);
+      }
+
+      .hero-board img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        opacity: 0.84;
+        filter: contrast(1.12) saturate(0.92);
+      }
+
+      .hero-board::after {
+        position: absolute;
+        inset: 0;
+        content: "";
+        background:
+          linear-gradient(90deg, rgba(216, 255, 0, 0.13), transparent 20%, transparent 78%, rgba(133, 96, 223, 0.18)),
+          repeating-linear-gradient(0deg, transparent 0 5px, rgba(255, 255, 255, 0.035) 5px 6px);
+        mix-blend-mode: screen;
+      }
+
+      .scan-caption {
+        position: absolute;
+        left: 28px;
+        bottom: 24px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--acid);
+        text-transform: uppercase;
+        z-index: 2;
+      }
+
+      .cover-footer {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 24px;
+        align-items: end;
+        color: var(--dim);
+        border-top: 1px solid var(--line-soft);
+        padding-top: 20px;
+      }
+
+      .logline {
+        max-width: 840px;
+        color: var(--soft);
+        font-size: 21px;
+        line-height: 1.24;
+      }
+
+      .scroll-note {
+        color: var(--acid);
+        font-size: 14px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+      }
+
+      .story-card {
+        display: grid;
+        grid-template-columns: minmax(0, 1.52fr) minmax(360px, 0.74fr);
+        gap: 26px;
+        align-items: stretch;
+      }
+
+      .frame {
+        position: relative;
+        overflow: hidden;
+        min-height: 620px;
+        aspect-ratio: 16 / 9;
+        border: 1px solid var(--line);
+        background:
+          radial-gradient(circle at 35% 42%, rgba(133, 96, 223, 0.16), transparent 32%),
+          linear-gradient(180deg, rgba(10, 15, 27, 0.96), rgba(3, 5, 12, 0.99));
+        box-shadow: 0 34px 90px rgba(0, 0, 0, 0.5);
+      }
+
+      .frame::before {
+        position: absolute;
+        inset: 0;
+        content: "";
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+        background-size: 44px 44px;
+        opacity: 0.38;
+      }
+
+      .frame-ui {
+        position: absolute;
+        inset: 8%;
+        border: 1px solid rgba(216, 255, 0, 0.35);
+        background: rgba(0, 0, 0, 0.54);
+        overflow: hidden;
+      }
+
+      .frame-ui img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        opacity: 0.8;
+      }
+
+      .lens {
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(100deg, transparent 0%, rgba(216, 255, 0, 0.14) 45%, transparent 64%),
+          radial-gradient(circle at 70% 35%, rgba(255, 210, 122, 0.14), transparent 28%);
+        mix-blend-mode: screen;
+      }
+
+      .hud-title {
+        position: absolute;
+        left: 6%;
+        top: 6%;
+        z-index: 2;
+      }
+
+      .hud-title small {
+        display: block;
+        color: var(--acid);
+        font-size: 17px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+      }
+
+      .hud-title strong {
+        display: block;
+        max-width: 760px;
+        margin-top: 8px;
+        font-size: clamp(48px, 4.8vw, 86px);
+        line-height: 0.86;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .glitch-stack {
+        position: absolute;
+        inset: auto 6% 8%;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 14px;
+        z-index: 2;
+      }
+
+      .glitch-card {
+        min-height: 116px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(5, 8, 18, 0.78);
+        padding: 14px;
+        color: var(--soft);
+      }
+
+      .glitch-card b {
+        display: block;
+        color: var(--acid);
+        font-size: 28px;
+        line-height: 1;
+      }
+
+      .glitch-card span {
+        display: block;
+        margin-top: 8px;
+        font-size: 14px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+      }
+
+      .shot-notes {
+        border: 1px solid var(--line-soft);
+        background: var(--panel);
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      .shot-number {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        color: var(--acid);
+        font-size: 15px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+      }
+
+      .shot-notes h2 {
+        font-size: 46px;
+        line-height: 0.92;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .shot-copy {
+        color: var(--soft);
+        font-size: 21px;
+        line-height: 1.24;
+        font-weight: 600;
+      }
+
+      .note-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .note {
+        display: grid;
+        grid-template-columns: 92px 1fr;
+        gap: 12px;
+        padding-top: 12px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .note b {
+        color: var(--gold-hot);
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+      }
+
+      .note span {
+        color: var(--soft);
+        font-size: 16px;
+        line-height: 1.25;
+      }
+
+      .vo {
+        padding: 16px;
+        border: 1px solid rgba(216, 255, 0, 0.25);
+        background: rgba(216, 255, 0, 0.07);
+        color: #f2ff8a;
+        font-size: 19px;
+        line-height: 1.25;
+        font-weight: 700;
+      }
+
+      .provider-noise {
+        position: absolute;
+        inset: 16% 8% 9%;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+      }
+
+      .provider {
+        position: relative;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(0, 0, 0, 0.58);
+        padding: 18px;
+        overflow: hidden;
+      }
+
+      .provider::after {
+        position: absolute;
+        inset: auto 0 0;
+        height: 3px;
+        content: "";
+        background: linear-gradient(90deg, var(--gold), var(--violet), transparent);
+      }
+
+      .provider h3 {
+        color: var(--acid);
+        font-size: 24px;
+        line-height: 1;
+        text-transform: uppercase;
+      }
+
+      .provider p {
+        margin-top: 12px;
+        color: var(--soft);
+        font-size: 18px;
+        line-height: 1.2;
+      }
+
+      .wire-lines {
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(45deg, transparent 48%, rgba(216, 255, 0, 0.22) 49%, transparent 51%),
+          linear-gradient(-45deg, transparent 48%, rgba(133, 96, 223, 0.22) 49%, transparent 51%);
+        opacity: 0.2;
+      }
+
+      .logo-blast {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        z-index: 2;
+      }
+
+      .logo-blast img {
+        width: 310px;
+        height: 310px;
+        object-fit: contain;
+        filter: drop-shadow(0 0 48px rgba(240, 179, 71, 0.45));
+      }
+
+      .logo-blast::before,
+      .logo-blast::after {
+        position: absolute;
+        content: "";
+        border: 1px solid rgba(216, 255, 0, 0.5);
+      }
+
+      .logo-blast::before {
+        width: 620px;
+        height: 620px;
+        transform: rotate(45deg);
+      }
+
+      .logo-blast::after {
+        width: 820px;
+        height: 230px;
+      }
+
+      .record-strip {
+        position: absolute;
+        left: 6%;
+        right: 6%;
+        top: 32%;
+        display: grid;
+        gap: 10px;
+        z-index: 3;
+      }
+
+      .record {
+        display: grid;
+        grid-template-columns: 80px 1fr 170px 210px;
+        gap: 16px;
+        align-items: center;
+        min-height: 64px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(0, 0, 0, 0.72);
+        padding: 12px 14px;
+      }
+
+      .rank {
+        color: var(--acid);
+        font-size: 30px;
+        font-weight: 700;
+      }
+
+      .build-name {
+        font-size: 26px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .meta {
+        color: var(--dim);
+        font-size: 14px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .icons {
+        display: flex;
+        gap: 5px;
+      }
+
+      .icons img {
+        width: 28px;
+        height: 28px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        object-fit: cover;
+      }
+
+      .panel-map {
+        position: absolute;
+        inset: 9% 5%;
+        display: grid;
+        grid-template-columns: 0.82fr 1.7fr 0.94fr;
+        grid-template-rows: 1fr 0.86fr;
+        gap: 14px;
+      }
+
+      .mini-panel {
+        position: relative;
+        border: 1px solid rgba(216, 255, 0, 0.22);
+        background: rgba(0, 0, 0, 0.66);
+        padding: 14px;
+        overflow: hidden;
+      }
+
+      .mini-panel.big {
+        grid-row: span 2;
+      }
+
+      .mini-panel.center {
+        grid-row: span 2;
+      }
+
+      .mini-panel h3 {
+        color: var(--dim);
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+
+      .mini-panel strong {
+        display: block;
+        margin-top: 10px;
+        color: var(--ink);
+        font-size: 31px;
+        line-height: 0.92;
+        text-transform: uppercase;
+      }
+
+      .hex-board {
+        position: absolute;
+        inset: 24% 8% 9%;
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 7px;
+      }
+
+      .hex {
+        aspect-ratio: 1;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%);
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      .hex.fill {
+        background: rgba(216, 255, 0, 0.15);
+        border-color: rgba(216, 255, 0, 0.55);
+        box-shadow: inset 0 0 18px rgba(216, 255, 0, 0.22);
+      }
+
+      .similarity-grid {
+        position: absolute;
+        inset: 24% 7% 10%;
+        display: grid;
+        grid-template-columns: repeat(10, 1fr);
+        gap: 9px;
+        z-index: 2;
+      }
+
+      .portrait {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(0, 0, 0, 0.65);
+      }
+
+      .portrait img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .portrait.on {
+        border-color: var(--acid);
+        box-shadow: 0 0 24px rgba(216, 255, 0, 0.24);
+      }
+
+      .routes {
+        position: absolute;
+        inset: 21% 7% 10%;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 14px;
+        z-index: 2;
+      }
+
+      .route-card {
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(0, 0, 0, 0.64);
+        padding: 17px;
+      }
+
+      .route-card b {
+        display: block;
+        color: var(--acid);
+        font-size: 44px;
+        line-height: 0.85;
+      }
+
+      .route-card span {
+        display: block;
+        margin-top: 14px;
+        color: var(--soft);
+        font-size: 18px;
+        line-height: 1.16;
+        font-weight: 600;
+      }
+
+      .timeline-bars {
+        position: absolute;
+        left: 7%;
+        right: 7%;
+        bottom: 10%;
+        z-index: 2;
+        display: grid;
+        gap: 9px;
+      }
+
+      .bar {
+        height: 18px;
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .bar span {
+        display: block;
+        height: 100%;
+        background: linear-gradient(90deg, var(--gold), var(--acid), var(--violet-hot));
+      }
+
+      .layout-tiles {
+        position: absolute;
+        inset: 18% 8% 12%;
+        display: grid;
+        grid-template-columns: 1.2fr 1.8fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        gap: 14px;
+        z-index: 2;
+      }
+
+      .tile {
+        border: 1px solid rgba(216, 255, 0, 0.28);
+        background: rgba(0, 0, 0, 0.66);
+        padding: 14px;
+        color: var(--dim);
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+      }
+
+      .tile:nth-child(2) {
+        grid-row: span 2;
+        border-color: rgba(216, 255, 0, 0.62);
+        box-shadow: inset 0 0 46px rgba(216, 255, 0, 0.08);
+      }
+
+      .final-lockup {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        z-index: 3;
+      }
+
+      .final-lockup h2 {
+        font-size: clamp(72px, 5.7vw, 112px);
+        line-height: 0.8;
+        text-transform: uppercase;
+        text-shadow: 0 0 40px rgba(216, 255, 0, 0.16);
+      }
+
+      .final-lockup p {
+        margin-top: 24px;
+        color: var(--acid);
+        font-size: 28px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+      }
+
+      .end-specs {
+        position: absolute;
+        left: 6%;
+        right: 6%;
+        bottom: 7%;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        z-index: 4;
+      }
+
+      .end-specs .spec {
+        background: rgba(0, 0, 0, 0.7);
+      }
+
+      .summary {
+        min-height: 100vh;
+        padding: 70px 84px;
+      }
+
+      .summary-grid {
+        display: grid;
+        grid-template-columns: 0.9fr 1.1fr;
+        gap: 30px;
+        align-items: start;
+      }
+
+      .summary h2 {
+        max-width: 780px;
+        font-size: 82px;
+        line-height: 0.86;
+        text-transform: uppercase;
+      }
+
+      .summary-card {
+        border: 1px solid var(--line-soft);
+        background: var(--panel);
+        padding: 22px;
+      }
+
+      .summary-card h3 {
+        color: var(--acid);
+        font-size: 18px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+
+      .summary-card p,
+      .summary-card li {
+        color: var(--soft);
+        font-size: 19px;
+        line-height: 1.28;
+      }
+
+      .summary-card ul {
+        margin: 14px 0 0;
+        padding-left: 22px;
+      }
+
+      .summary-stack {
+        display: grid;
+        gap: 14px;
+      }
+
+      @media (max-width: 1300px) {
+        body {
+          min-width: 980px;
+        }
+
+        .slide,
+        .summary {
+          padding-left: 48px;
+          padding-right: 48px;
+        }
+
+        .story-card,
+        .cover-body,
+        .summary-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .frame {
+          min-height: 520px;
+        }
+
+        .shot-notes {
+          min-height: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="progress" id="progress"></div>
+    <nav class="rail" aria-label="Storyboard navigation">
+      <a href="#cover" title="Cover"></a>
+      <a href="#shot-01" title="Shot 01"></a>
+      <a href="#shot-02" title="Shot 02"></a>
+      <a href="#shot-03" title="Shot 03"></a>
+      <a href="#shot-04" title="Shot 04"></a>
+      <a href="#shot-05" title="Shot 05"></a>
+      <a href="#shot-06" title="Shot 06"></a>
+      <a href="#shot-07" title="Shot 07"></a>
+      <a href="#shot-08" title="Shot 08"></a>
+      <a href="#summary" title="Summary"></a>
+    </nav>
+
+    <main class="deck">
+      <section class="cover" id="cover">
+        <header class="cover-header">
+          <div class="brand-lockup">
+            <img class="brand-mark" src="assets/opnrgg.svg" alt="opnr.gg mark" />
+            <div class="brand-name">opnr.gg</div>
+          </div>
+          <div class="tag-row">
+            <span class="tag">4K promo proposal</span>
+            <span class="tag">After Effects quality target</span>
+            <span class="tag">45 seconds</span>
+          </div>
+        </header>
+
+        <div class="cover-body">
+          <div>
+            <p class="eyebrow">Storyboard proposition</p>
+            <h1>One command surface for the TFT lobby clock.</h1>
+            <p class="lead">
+              A high-energy product film that turns scattered meta research into a cinematic,
+              data-dense desktop control room.
+            </p>
+            <div class="spec-grid">
+              <div class="spec"><span>Format</span><strong>3840 x 2160</strong></div>
+              <div class="spec"><span>Runtime</span><strong>00:45</strong></div>
+              <div class="spec"><span>Frame rate</span><strong>60 fps</strong></div>
+              <div class="spec"><span>Style</span><strong>Dark UI / gold signal / violet depth</strong></div>
+            </div>
+          </div>
+
+          <div class="hero-board">
+            <img src="assets/ui-selected.png" alt="opnr.gg selected build reference" />
+            <div class="scan-caption">[ Scroll the board ] [ shot-by-shot ]</div>
+          </div>
+        </div>
+
+        <footer class="cover-footer">
+          <p class="logline">
+            Core proposition: opnr.gg does not sell "more data." It sells immediate read speed:
+            build choice, item direction, leveling plan, board shape, and comp similarity in one
+            draggable command surface.
+          </p>
+          <div class="scroll-note">Scroll down</div>
+        </footer>
+      </section>
+
+      <section class="slide" id="shot-01">
+        <div class="slide-inner">
+          <div class="topline">
+            <span>Cold open</span>
+            <div class="tag-row"><span class="tag">00:00-00:04</span><span class="tag">Problem hook</span></div>
+          </div>
+          <div class="story-card">
+            <div class="frame">
+              <div class="wire-lines"></div>
+              <div class="hud-title">
+                <small>Lobby timer: active</small>
+                <strong>The round starts before research catches up.</strong>
+              </div>
+              <div class="glitch-stack">
+                <div class="glitch-card"><b>18</b><span>tabs open</span></div>
+                <div class="glitch-card"><b>5</b><span>sources disagree</span></div>
+                <div class="glitch-card"><b>90s</b><span>until commit</span></div>
+                <div class="glitch-card"><b>0</b><span>clear line</span></div>
+              </div>
+              <div class="lens"></div>
+            </div>
+            <aside class="shot-notes">
+              <div class="shot-number"><span>Shot 01</span><span>4.0s</span></div>
+              <h2>Open with pressure.</h2>
+              <p class="shot-copy">
+                Start on abstracted TFT decision chaos: noisy cards, source names, tier badges,
+                item icons, and clock fragments snapping across a black grid.
+              </p>
+              <div class="vo">VO: "In TFT, the hardest part is not finding data. It is reading it fast enough to act."</div>
+              <div class="note-list">
+                <div class="note"><b>Camera</b><span>Macro push through floating UI fragments, 4K depth blur, slight handheld energy.</span></div>
+                <div class="note"><b>Motion</b><span>Glitch cuts, luma matte reveals, noisy tab cards collapsing toward one center line.</span></div>
+                <div class="note"><b>Sound</b><span>Low clock pulse, keyboard hits, tiny UI error chirps building tension.</span></div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="shot-02">
+        <div class="slide-inner">
+          <div class="topline">
+            <span>Source overload</span>
+            <div class="tag-row"><span class="tag">00:04-00:09</span><span class="tag">Meta noise</span></div>
+          </div>
+          <div class="story-card">
+            <div class="frame">
+              <div class="hud-title">
+                <small>Five sources. Different shapes.</small>
+                <strong>Every site knows something. None of them fit your moment.</strong>
+              </div>
+              <div class="provider-noise">
+                <div class="provider">
+                  <h3>TFTAcademy</h3>
+                  <p>Clean route guidance, but separate from your current board and item state.</p>
+                </div>
+                <div class="provider">
+                  <h3>Mobalytics</h3>
+                  <p>Powerful comp signals, but packed in a web layout built for browsing.</p>
+                </div>
+                <div class="provider">
+                  <h3>MetaTFT</h3>
+                  <p>Stat pressure and win signals that need context before they become a plan.</p>
+                </div>
+              </div>
+              <div class="lens"></div>
+            </div>
+            <aside class="shot-notes">
+              <div class="shot-number"><span>Shot 02</span><span>5.0s</span></div>
+              <h2>Show why opnr exists.</h2>
+              <p class="shot-copy">
+                This beat names the pain without dragging competitors. The message is that TFT data
+                is useful, but the player needs it normalized into the decision surface.
+              </p>
+              <div class="vo">VO: "The meta is scattered across sources, formats, and assumptions."</div>
+              <div class="note-list">
+                <div class="note"><b>Camera</b><span>Three provider cards orbit; camera fails to settle until opnr interrupts.</span></div>
+                <div class="note"><b>Motion</b><span>Cards shear apart by source, then get pulled into one grid line.</span></div>
+                <div class="note"><b>AE note</b><span>Use displacement maps and chromatic split only on transitions, not on readable text.</span></div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="shot-03">
+        <div class="slide-inner">
+          <div class="topline">
+            <span>Brand reveal</span>
+            <div class="tag-row"><span class="tag">00:09-00:13</span><span class="tag">Reset</span></div>
+          </div>
+          <div class="story-card">
+            <div class="frame">
+              <div class="logo-blast">
+                <img src="assets/opnrgg.svg" alt="opnr.gg mark" />
+              </div>
+              <div class="final-lockup" style="place-items: end center; padding-bottom: 8%;">
+                <p>[ OPNR.GG ]</p>
+              </div>
+              <div class="lens"></div>
+            </div>
+            <aside class="shot-notes">
+              <div class="shot-number"><span>Shot 03</span><span>4.0s</span></div>
+              <h2>Give the chaos a center.</h2>
+              <p class="shot-copy">
+                The logo becomes an aperture. The noisy research cards compress through it and
+                resolve into the actual opnr.gg desktop surface.
+              </p>
+              <div class="vo">VO: "opnr.gg turns that noise into a board you can actually use."</div>
+              <div class="note-list">
+                <div class="note"><b>Camera</b><span>Center-lock zoom. UI debris flies past camera, then hard-snap to crisp product frame.</span></div>
+                <div class="note"><b>Motion</b><span>Gold aperture wipe, violet shadow trails, one clean bass hit on logo lock.</span></div>
+                <div class="note"><b>Text</b><span>No slogan yet. Let the brand mark own the reset.</span></div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="shot-04">
+        <div class="slide-inner">
+          <div class="topline">
+            <span>Build browser</span>
+            <div class="tag-row"><span class="tag">00:13-00:19</span><span class="tag">Core surface</span></div>
+          </div>
+          <div class="story-card">
+            <div class="frame">
+              <div class="frame-ui" style="inset: 6% 5%;">
+                <img src="assets/ui-empty.png" alt="opnr.gg build browser reference" />
+              </div>
+              <div class="record-strip">
+                <div class="record">
+                  <div class="rank">[ S ]</div>
+                  <div><div class="build-name">Cards & Cartridges</div><div class="meta">Mobalytics / Early / 22 evidence</div></div>
+                  <div class="icons">
+                    <img src="../../public/assets/champions/leona.png" alt="" />
+                    <img src="../../public/assets/champions/sona.png" alt="" />
+                    <img src="../../public/assets/champions/akali.png" alt="" />
+                    <img src="../../public/assets/champions/jinx.png" alt="" />
+                  </div>
+                  <div class="meta">components resolved</div>
+                </div>
+                <div class="record">
+                  <div class="rank">[ S ]</div>
+                  <div><div class="build-name">Crab Wave</div><div class="meta">Mobalytics / Early / 22 evidence</div></div>
+                  <div class="icons">
+                    <img src="../../public/assets/champions/aatrox.png" alt="" />
+                    <img src="../../public/assets/champions/ahri.png" alt="" />
+                    <img src="../../public/assets/champions/bard.png" alt="" />
+                    <img src="../../public/assets/champions/belveth.png" alt="" />
+                  </div>
+                  <div class="meta">board phase ready</div>
+                </div>
+                <div class="record">
+                  <div class="rank">[ S ]</div>
+                  <div><div class="build-name">Fateweaver Reroll</div><div class="meta">TFTAcademy / Early / 32 evidence</div></div>
+                  <div class="icons">
+                    <img src="../../public/assets/champions/annie.png" alt="" />
+                    <img src="../../public/assets/champions/ashe.png" alt="" />
+                    <img src="../../public/assets/champions/aurora.png" alt="" />
+                    <img src="../../public/assets/champions/azir.png" alt="" />
+                  </div>
+                  <div class="meta">source preserved</div>
+                </div>
+              </div>
+              <div class="lens"></div>
+            </div>
+            <aside class="shot-notes">
+              <div class="shot-number"><span>Shot 04</span><span>6.0s</span></div>
+              <h2>Make the browser feel fast.</h2>
+              <p class="shot-copy">
+                The build browser is the first fully readable product shot. Rank, source, phase,
+                evidence, champions, augments, and components are all visible at once.
+              </p>
+              <div class="vo">VO: "Sort the meta by source, rank, phase, evidence, champions, and items."</div>
+              <div class="note-list">
+                <div class="note"><b>Camera</b><span>Wide 4K UI plate, then a precision dolly into the selected build row.</span></div>
+                <div class="note"><b>Motion</b><span>Rows type-on in staggered passes. Evidence labels flicker once, then stabilize.</span></div>
+                <div class="note"><b>Product</b><span>Emphasize "105 visible" and provider-native evidence instead of generic tier-list claims.</span></div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="shot-05">
+        <div class="slide-inner">
+          <div class="topline">
+            <span>One click opens the plan</span>
+            <div class="tag-row"><span class="tag">00:19-00:26</span><span class="tag">Panel explosion</span></div>
+          </div>
+          <div class="story-card">
+            <div class="frame">
+              <div class="frame-ui" style="inset: 4% 4%;">
+                <img src="assets/ui-selected.png" alt="opnr.gg selected build board" />
+              </div>
+              <div class="panel-map">
+                <div class="mini-panel big">
+                  <h3>03 / Synergies</h3>
+                  <strong>StarGazer 3<br />Bastion 2<br />Rogue 2</strong>
+                </div>
+                <div class="mini-panel center">
+                  <h3>02 / Board View</h3>
+                  <strong>Late board<br />9 units</strong>
+                  <div class="hex-board">
+                    <div class="hex"></div><div class="hex fill"></div><div class="hex"></div><div class="hex fill"></div><div class="hex"></div><div class="hex"></div><div class="hex fill"></div>
+                    <div class="hex fill"></div><div class="hex"></div><div class="hex fill"></div><div class="hex"></div><div class="hex fill"></div><div class="hex"></div><div class="hex"></div>
+                    <div class="hex"></div><div class="hex fill"></div><div class="hex"></div><div class="hex fill"></div><div class="hex"></div><div class="hex fill"></div><div class="hex"></div>
+                  </div>
+                </div>
+                <div class="mini-panel">
+                  <h3>01 / Overview</h3>
+                  <strong>Cards &<br />Cartridges</strong>
+                </div>
+                <div class="mini-panel">
+                  <h3>06 / Components</h3>
+                  <strong>7 demands<br />resolved</strong>
+                </div>
+              </div>
+              <div class="lens"></div>
+            </div>
+            <aside class="shot-notes">
+              <div class="shot-number"><span>Shot 05</span><span>7.0s</span></div>
+              <h2>Sell the control room.</h2>
+              <p class="shot-copy">
+                Selecting one build fills every panel: overview, board view, synergies, components,
+                leveling guide, augment recs, game plan, and inspector.
+              </p>
+              <div class="vo">VO: "Pick a line, and the whole board answers at once."</div>
+              <div class="note-list">
+                <div class="note"><b>Camera</b><span>One click ripple at center; panels slide outward into a working tactical layout.</span></div>
+                <div class="note"><b>Motion</b><span>Panel headers lock first, then content populates in cascading layers.</span></div>
+                <div class="note"><b>Sound</b><span>Mechanical slide, subtle glass ticks, one low confirmation tone.</span></div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="shot-06">
+        <div class="slide-inner">
+          <div class="topline">
+            <span>Similarity filter</span>
+            <div class="tag-row"><span class="tag">00:26-00:32</span><span class="tag">Decision assist</span></div>
+          </div>
+          <div class="story-card">
+            <div class="frame">
+              <div class="hud-title">
+                <small>Late similarity filter</small>
+                <strong>Find the closest playable line from what you already hit.</strong>
+              </div>
+              <div class="similarity-grid">
+                <div class="portrait on"><img src="../../public/assets/champions/leona.png" alt="" /></div>
+                <div class="portrait"><img src="../../public/assets/champions/sona.png" alt="" /></div>
+                <div class="portrait on"><img src="../../public/assets/champions/jinx.png" alt="" /></div>
+                <div class="portrait"><img src="../../public/assets/champions/akali.png" alt="" /></div>
+                <div class="portrait"><img src="../../public/assets/champions/bard.png" alt="" /></div>
+                <div class="portrait on"><img src="../../public/assets/champions/ashe.png" alt="" /></div>
+                <div class="portrait"><img src="../../public/assets/champions/belveth.png" alt="" /></div>
+                <div class="portrait"><img src="../../public/assets/champions/annie.png" alt="" /></div>
+                <div class="portrait on"><img src="../../public/assets/champions/azir.png" alt="" /></div>
+                <div class="portrait"><img src="../../public/assets/champions/aurora.png" alt="" /></div>
+                <div class="portrait"><img src="../../public/assets/champions/aatrox.png" alt="" /></div>
+                <div class="portrait on"><img src="../../public/assets/champions/ahri.png" alt="" /></div>
+                <div class="portrait"><img src="../../public/assets/champions/anivia.png" alt="" /></div>
+                <div class="portrait"><img src="../../public/assets/champions/aphelios.png" alt="" /></div>
+                <div class="portrait on"><img src="../../public/assets/champions/ambessa.png" alt="" /></div>
+                <div class="portrait"><img src="../../public/assets/champions/blitzcrank.png" alt="" /></div>
+                <div class="portrait"><img src="../../public/assets/champions/briar.png" alt="" /></div>
+                <div class="portrait on"><img src="../../public/assets/champions/caitlyn.png" alt="" /></div>
+                <div class="portrait"><img src="../../public/assets/champions/diana.png" alt="" /></div>
+                <div class="portrait"><img src="../../public/assets/champions/darius.png" alt="" /></div>
+              </div>
+              <div class="timeline-bars">
+                <div class="bar"><span style="width: 84%"></span></div>
+                <div class="bar"><span style="width: 72%"></span></div>
+                <div class="bar"><span style="width: 58%"></span></div>
+              </div>
+              <div class="lens"></div>
+            </div>
+            <aside class="shot-notes">
+              <div class="shot-number"><span>Shot 06</span><span>6.0s</span></div>
+              <h2>Make filtering cinematic.</h2>
+              <p class="shot-copy">
+                Instead of showing a dry search box, the video turns selected champs, items, and
+                traits into signal nodes that re-rank the comp browser in real time.
+              </p>
+              <div class="vo">VO: "Filter by the units and items in front of you, then pivot with confidence."</div>
+              <div class="note-list">
+                <div class="note"><b>Camera</b><span>Top-down grid scan. Selected portraits pulse, then send lines to ranked comp matches.</span></div>
+                <div class="note"><b>Motion</b><span>Similarity bars fill like radar returns; weak matches fade behind the grid.</span></div>
+                <div class="note"><b>Product</b><span>Show this as a practical pivot tool, not an abstract AI promise.</span></div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="shot-07">
+        <div class="slide-inner">
+          <div class="topline">
+            <span>Route planning</span>
+            <div class="tag-row"><span class="tag">00:32-00:39</span><span class="tag">Actionable read</span></div>
+          </div>
+          <div class="story-card">
+            <div class="frame">
+              <div class="hud-title">
+                <small>From recommendation to action</small>
+                <strong>Level, augment, item, board.</strong>
+              </div>
+              <div class="routes">
+                <div class="route-card"><b>L4</b><span>2-1: stabilize early units and hold route-critical pairs.</span></div>
+                <div class="route-card"><b>L5</b><span>2-5: identify reroll window or preserve econ for tempo.</span></div>
+                <div class="route-card"><b>L6</b><span>3-2: commit components and check augment alignment.</span></div>
+                <div class="route-card"><b>L7</b><span>4-1: lock board shape and compare strongest pivots.</span></div>
+              </div>
+              <div class="lens"></div>
+            </div>
+            <aside class="shot-notes">
+              <div class="shot-number"><span>Shot 07</span><span>7.0s</span></div>
+              <h2>Convert data into next steps.</h2>
+              <p class="shot-copy">
+                The audience sees that opnr.gg is not only a comp list. It gives a route: leveling
+                checkpoints, augment reads, component demand, and board shape.
+              </p>
+              <div class="vo">VO: "Not a spreadsheet. A route through the next fight, carousel, augment, and rolldown."</div>
+              <div class="note-list">
+                <div class="note"><b>Camera</b><span>Four route cards unfold into a timeline, then collapse back into the app UI.</span></div>
+                <div class="note"><b>Motion</b><span>Checkpoint markers hit on beat. Lines snap between level cards and board panel.</span></div>
+                <div class="note"><b>AE note</b><span>Use layered parallax: route text in foreground, app surface behind, icon particles in between.</span></div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="shot-08">
+        <div class="slide-inner">
+          <div class="topline">
+            <span>Desktop-first payoff</span>
+            <div class="tag-row"><span class="tag">00:39-00:45</span><span class="tag">End card</span></div>
+          </div>
+          <div class="story-card">
+            <div class="frame">
+              <div class="layout-tiles">
+                <div class="tile">Build controls</div>
+                <div class="tile">Build browser / source evidence</div>
+                <div class="tile">Overview</div>
+                <div class="tile">Similarities</div>
+                <div class="tile">Board view</div>
+              </div>
+              <div class="final-lockup">
+                <div>
+                  <h2>Open. Read. Roll.</h2>
+                  <p>opnr.gg</p>
+                </div>
+              </div>
+              <div class="end-specs">
+                <div class="spec"><span>Surface</span><strong>Desktop first</strong></div>
+                <div class="spec"><span>Data</span><strong>Local normalized set</strong></div>
+                <div class="spec"><span>Workflow</span><strong>Drag panels</strong></div>
+                <div class="spec"><span>Outcome</span><strong>Faster decisions</strong></div>
+              </div>
+              <div class="lens"></div>
+            </div>
+            <aside class="shot-notes">
+              <div class="shot-number"><span>Shot 08</span><span>6.0s</span></div>
+              <h2>Land the proposition.</h2>
+              <p class="shot-copy">
+                The end card should feel like a premium game HUD, not a SaaS landing page.
+                The product message is concise and repeatable.
+              </p>
+              <div class="vo">VO: "opnr.gg. Open the meta. Read the board. Roll on purpose."</div>
+              <div class="note-list">
+                <div class="note"><b>Camera</b><span>Layout tiles slide into their final optimized positions, then camera pulls back to full logo.</span></div>
+                <div class="note"><b>Motion</b><span>Gold grid line scans once across the frame, ending on the mark.</span></div>
+                <div class="note"><b>CTA</b><span>Use the domain only if public DNS is live. Until then, end on the app name and release channel.</span></div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section class="summary" id="summary">
+        <div class="slide-inner">
+          <div class="topline">
+            <span>Production summary</span>
+            <div class="tag-row"><span class="tag">Ready for animatic</span><span class="tag">4K master</span></div>
+          </div>
+          <div class="summary-grid">
+            <div>
+              <p class="eyebrow">Final proposition</p>
+              <h2>A tactical product film, not a generic gaming ad.</h2>
+              <p class="lead">
+                The video should make opnr.gg feel like an expert table built into the desktop:
+                fast, dense, source-aware, and playable under pressure.
+              </p>
+            </div>
+            <div class="summary-stack">
+              <div class="summary-card">
+                <h3>Creative direction</h3>
+                <p>
+                  Dark dot-matrix workspace, sharp Rajdhani typography, gold decision signal,
+                  violet depth, acid-green active state, minimal rounded corners, readable UI.
+                </p>
+              </div>
+              <div class="summary-card">
+                <h3>Must-show product moments</h3>
+                <ul>
+                  <li>Build browser with source, rank, phase, evidence, champions, augments, and components.</li>
+                  <li>Selected build populating board view, overview, synergies, items, leveling, and augments.</li>
+                  <li>Similarity filtering by champions, items, traits, and current board signals.</li>
+                  <li>Desktop-first draggable panel layout as the signature UI identity.</li>
+                </ul>
+              </div>
+              <div class="summary-card">
+                <h3>Production next step</h3>
+                <p>
+                  Turn this storyboard into an animatic: export 4K UI plates, record cursor/panel
+                  motion passes, cut to a 45-second timing track, then animate typography, camera,
+                  parallax, and signal lines in After Effects or HyperFrames.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const progress = document.getElementById("progress");
+
+      function updateProgress() {
+        const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+        const value = maxScroll > 0 ? window.scrollY / maxScroll : 0;
+        progress.style.transform = `scaleX(${Math.max(0, Math.min(1, value))})`;
+      }
+
+      window.addEventListener("scroll", updateProgress, { passive: true });
+      window.addEventListener("resize", updateProgress);
+      updateProgress();
+    </script>
+  </body>
+</html>
